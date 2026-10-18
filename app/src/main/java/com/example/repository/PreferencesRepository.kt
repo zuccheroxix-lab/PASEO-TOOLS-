@@ -35,13 +35,13 @@ class PreferencesRepository(context: Context) {
         }
 
     var supportLink: String
-        get() = prefs.getString(KEY_SUPPORT_LINK, "https://github.com/zuccheroxann") ?: "https://github.com/zuccheroxann"
+        get() = prefs.getString(KEY_SUPPORT_LINK, "https://github.com/zuccheroxix-lab/PASEO-TOOLS-") ?: "https://github.com/zuccheroxix-lab/PASEO-TOOLS-"
         set(value) {
             prefs.edit().putString(KEY_SUPPORT_LINK, value).apply()
         }
 
     var bugReportLink: String
-        get() = prefs.getString(KEY_BUG_REPORT_LINK, "https://github.com/zuccheroxann/PASEO-SENSI/issues") ?: "https://github.com/zuccheroxann/PASEO-SENSI/issues"
+        get() = prefs.getString(KEY_BUG_REPORT_LINK, "https://github.com/zuccheroxix-lab/PASEO-TOOLS-/issues") ?: "https://github.com/zuccheroxix-lab/PASEO-TOOLS-/issues"
         set(value) {
             prefs.edit().putString(KEY_BUG_REPORT_LINK, value).apply()
         }

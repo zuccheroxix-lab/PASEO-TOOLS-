@@ -1,4 +1,4 @@
-name: Build PASEO SENSI APK
+name: Build and Release PASEO SENSI APK
 
 on:
   push:
@@ -89,12 +89,8 @@ jobs:
             echo "STORE_PASSWORD=${KEYSTORE_PASSWORD}" >> $GITHUB_ENV
             echo "KEY_PASSWORD=${KEY_PASSWORD}" >> $GITHUB_ENV
           else
-            echo "Notice: KEYSTORE_BASE64 secret not found. Generating release upload keystore fallback..."
-            if [ -f debug.keystore ]; then
-              cp debug.keystore my-upload-key.jks
-            else
-              keytool -genkeypair -v -keystore my-upload-key.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=ZuccheroXann, OU=Development, O=PaseoSensi, L=City, S=State, C=ID"
-            fi
+            echo "Notice: KEYSTORE_BASE64 secret not found. Generating release upload keystore with alias upload..."
+            keytool -genkeypair -v -keystore my-upload-key.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=ZuccheroXann, OU=Development, O=PaseoSensi, L=City, S=State, C=ID"
             echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
             echo "STORE_PASSWORD=android" >> $GITHUB_ENV
             echo "KEY_PASSWORD=android" >> $GITHUB_ENV
@@ -103,18 +99,15 @@ jobs:
       - name: Run Unit Tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build Debug and Release APK
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --stacktrace
-
-      - name: Verify & Package Output APKs
+      - name: Package and Verify Output Assets
         run: |
           mkdir -p output-apks
 
-          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -n 1)
 
           if [ -z "$DEBUG_APK" ] || [ ! -f "$DEBUG_APK" ]; then
             echo "Error: Debug APK not found!"
@@ -126,42 +119,73 @@ jobs:
             exit 1
           fi
 
-          cp "$DEBUG_APK" output-apks/PASEO_SENSI_v1.0.0_debug.apk
-          cp "$RELEASE_APK" output-apks/PASEO_SENSI_v1.0.0_release.apk
+          # Verify minimum size (must be valid APK > 1MB)
+          RELEASE_SIZE=$(stat -c%s "$RELEASE_APK" 2>/dev/null || stat -f%z "$RELEASE_APK")
+          echo "Verified Release APK size: $RELEASE_SIZE bytes"
+          if [ "$RELEASE_SIZE" -lt 1000000 ]; then
+            echo "Error: Generated Release APK is suspiciously small ($RELEASE_SIZE bytes)!"
+            exit 1
+          fi
 
-          echo "=== Generated APK Files ==="
+          # Output naming: PASEO-SENSI-v1.0.0.apk
+          cp "$RELEASE_APK" output-apks/PASEO-SENSI-v1.0.0.apk
+          cp "$DEBUG_APK" output-apks/PASEO-SENSI-v1.0.0-debug.apk
+
+          # Package full source code ZIP
+          zip -r output-apks/PASEO-SENSI-v1.0.0-source.zip . \
+            -x "*.git*" \
+            -x "*build*" \
+            -x "*.gradle*" \
+            -x "*output-apks*" \
+            -x "*.idea*"
+
+          echo "=== Verified Assets Ready for Upload ==="
           ls -lh output-apks/
 
       - name: Upload APKs as Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PASEO-SENSI-APKs
-          path: output-apks/*.apk
+          name: PASEO-SENSI-v1.0.0-assets
+          path: output-apks/*
           retention-days: 30
 
-      - name: Create GitHub Release on Version Tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish GitHub Release
+        if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          name: "PASEO SENSI ${{ github.ref_name }}"
-          tag_name: ${{ github.ref }}
+          name: "PASEO SENSI v1.0.0"
+          tag_name: "v1.0.0"
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
           body: |
-            ## 🎮 PASEO SENSI — Official Release ${{ github.ref_name }}
+            ## 🎮 PASEO SENSI — Official Release v1.0.0
             **Created by: ZUCCHERO XANN — DEVELOPER**
             
+            ### 📥 Unduhan Langsung APK (Android):
+            - 🚀 **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0.apk)** (APK Release Siap Pasang)
+            - 🛠️ **[Download PASEO-SENSI-v1.0.0-debug.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0-debug.apk)** (APK Debug Pengujian)
+            - 📦 **[Download PASEO-SENSI-v1.0.0-source.zip](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0-source.zip)** (Source Code Lengkap)
+            
+            ---
+            
+            ### 📱 Panduan Instalasi di HP Android:
+            1. Klik tautan **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0.apk)** melalui browser HP Anda (Chrome, Samsung Internet, dll.).
+            2. Jika muncul peringatan keamanan *"File mungkin berbahaya / File might be harmful"*, pilih **Tetap unduh / Download anyway**.
+            3. Setelah selesai, buka berkas dari notifikasi download atau melalui Pengelola File (File Manager) di folder **Download**.
+            4. Jika diminta izin instalasi, aktifkan opsi **"Izinkan dari sumber ini / Allow from this source"**.
+            5. Tekan **Instal** dan nikmati performa gaming maksimal dengan PASEO SENSI!
+            
+            ---
+            
             ### ✨ Fitur Unggulan:
-            - **Shizuku Integration:** Sambungan resmi ADB wireless untuk konfigurasi `wm size`, `wm density`, dan `pointer_location`.
-            - **Resolution & DPI Manager:** Ubah resolusi render dan sensitivitas DPI layar dengan konfirmasi dan rollback aman.
-            - **ROG Monitoring:** Telemetri nyata RAM, suhu baterai, tegangan, CPU cores, dan refresh rate layar.
-            - **Aim Assistant / Custom Crosshair:** Reticle overlay mengambang yang dapat dikustomisasi (bentuk, warna, ukuran, gap, transparansi, offset).
+            - **Shizuku ADB Integration:** Sambungan resmi Wireless Debugging untuk konfigurasi `wm size`, `wm density`, dan `pointer_location`.
+            - **Resolution & DPI Manager:** Ubah resolusi render display dan sensitivitas DPI layar dengan konfirmasi dan rollback instan.
+            - **ROG Monitoring:** Telemetri nyata RAM (*used/free/total*), suhu baterai (°C), voltase (mV), CPU cores, dan refresh rate layar.
+            - **Aim Assistant / Custom Crosshair:** Reticle overlay mengambang yang dapat dikustomisasi (6 bentuk, pilihan warna, ukuran, gap, transparansi, offset X/Y).
             - **Sensi Pack & Aim Trick 15%:** Profil kalibrasi sensitivitas sentuh dan mikro-tuning yang aman dan etis tanpa cheat.
             - **Game Launcher:** Pendeteksi game dan aplikasi terpasang nyata dengan integrasi package manager Android.
-
-            ### 📦 Unduhan APK:
-            - `PASEO_SENSI_v1.0.0_release.apk` (Versi Release Siap Pakai)
-            - `PASEO_SENSI_v1.0.0_debug.apk` (Versi Debug Pengujian)
           files: |
-            output-apks/*.apk
+            output-apks/PASEO-SENSI-v1.0.0.apk
+            output-apks/PASEO-SENSI-v1.0.0-debug.apk
+            output-apks/PASEO-SENSI-v1.0.0-source.zip
