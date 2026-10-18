@@ -1,0 +1,109 @@
+name: Build PASEO SENSI APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Debug and Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make Gradle Wrapper Executable
+        run: chmod +x gradlew
+
+      - name: Prepare Signing Key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Decoding release keystore from GitHub Secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+            echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=${KEYSTORE_PASSWORD}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${KEY_PASSWORD}" >> $GITHUB_ENV
+          else
+            echo "Notice: KEYSTORE_BASE64 secret not found. Using debug key as fallback for release testing."
+            if [ -f debug.keystore ]; then
+              cp debug.keystore my-upload-key.jks
+            else
+              keytool -genkeypair -v -keystore my-upload-key.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=ZuccheroXann, OU=Development, O=PaseoSensi, L=City, S=State, C=ID"
+            fi
+            echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=android" >> $GITHUB_ENV
+          fi
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Copy & Rename APKs
+        run: |
+          mkdir -p output-apks
+          find app/build/outputs/apk/debug -name "*.apk" -exec cp {} output-apks/PASEO_SENSI_v1.0.0_debug.apk \;
+          find app/build/outputs/apk/release -name "*.apk" -exec cp {} output-apks/PASEO_SENSI_v1.0.0_release.apk \;
+          ls -la output-apks/
+
+      - name: Upload APKs as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PASEO-SENSI-APKs
+          path: output-apks/*.apk
+          retention-days: 30
+
+      - name: Create GitHub Release on Version Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "PASEO SENSI ${{ github.ref_name }}"
+          tag_name: ${{ github.ref }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 🎮 PASEO SENSI — Official Release ${{ github.ref_name }}
+            **Created by: ZUCCHERO XANN — DEVELOPER**
+            
+            ### ✨ Fitur Unggulan:
+            - **Shizuku Integration:** Sambungan resmi ADB wireless untuk konfigurasi `wm size`, `wm density`, dan `pointer_location`.
+            - **Resolution & DPI Manager:** Ubah resolusi render dan sensitivitas DPI layar dengan konfirmasi dan rollback aman.
+            - **ROG Monitoring:** Telemetri nyata RAM, suhu baterai, tegangan, CPU cores, dan refresh rate layar.
+            - **Aim Assistant / Custom Crosshair:** Reticle overlay mengambang yang dapat dikustomisasi (bentuk, warna, ukuran, gap, transparansi, offset).
+            - **Sensi Pack & Aim Trick 15%:** Profil kalibrasi sensitivitas sentuh dan mikro-tuning yang aman dan etis tanpa cheat.
+            - **Game Launcher:** Pendeteksi game dan aplikasi terpasang nyata dengan integrasi package manager Android.
+
+            ### 📦 Unduhan APK:
+            - `PASEO_SENSI_v1.0.0_release.apk` (Versi Release Siap Pakai)
+            - `PASEO_SENSI_v1.0.0_debug.apk` (Versi Debug Pengujian)
+          files: |
+            output-apks/*.apk
