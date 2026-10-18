@@ -8,6 +8,11 @@ on:
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Release Tag Version'
+        required: false
+        default: 'v1.0.0'
 
 permissions:
   contents: write
@@ -127,7 +132,7 @@ jobs:
             exit 1
           fi
 
-          # Output naming: PASEO-SENSI-v1.0.0.apk
+          # Output naming: PASEO-SENSI-v1.0.0.apk (official release APK)
           cp "$RELEASE_APK" output-apks/PASEO-SENSI-v1.0.0.apk
           cp "$DEBUG_APK" output-apks/PASEO-SENSI-v1.0.0-debug.apk
 
@@ -153,24 +158,28 @@ jobs:
         if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           name: "PASEO SENSI v1.0.0"
-          tag_name: "v1.0.0"
+          tag_name: ${{ inputs.version_tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.0.0') }}
           draft: false
           prerelease: false
+          make_latest: true
+          overwrite: true
+          fail_on_unmatched_files: true
           generate_release_notes: false
           body: |
             ## 🎮 PASEO SENSI — Official Release v1.0.0
             **Created by: ZUCCHERO XANN — DEVELOPER**
             
             ### 📥 Unduhan Langsung APK (Android):
-            - 🚀 **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0.apk)** (APK Release Siap Pasang)
-            - 🛠️ **[Download PASEO-SENSI-v1.0.0-debug.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0-debug.apk)** (APK Debug Pengujian)
-            - 📦 **[Download PASEO-SENSI-v1.0.0-source.zip](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0-source.zip)** (Source Code Lengkap)
+            - 🚀 **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** (APK Release Siap Pasang)
+            - 🛠️ **[Download PASEO-SENSI-v1.0.0-debug.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-debug.apk)** (APK Debug Pengujian)
+            - 📦 **[Download PASEO-SENSI-v1.0.0-source.zip](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-source.zip)** (Source Code Lengkap)
             
             ---
             
             ### 📱 Panduan Instalasi di HP Android:
-            1. Klik tautan **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0.apk)** melalui browser HP Anda (Chrome, Samsung Internet, dll.).
+            1. Klik tautan **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** melalui browser HP Anda (Chrome, Samsung Internet, dll.).
             2. Jika muncul peringatan keamanan *"File mungkin berbahaya / File might be harmful"*, pilih **Tetap unduh / Download anyway**.
             3. Setelah selesai, buka berkas dari notifikasi download atau melalui Pengelola File (File Manager) di folder **Download**.
             4. Jika diminta izin instalasi, aktifkan opsi **"Izinkan dari sumber ini / Allow from this source"**.

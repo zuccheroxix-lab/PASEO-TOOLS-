@@ -16,28 +16,42 @@ Unduh versi resmi aplikasi langsung ke perangkat Android Anda tanpa perlu kompil
 
 | Berkas | Deskripsi | Tautan Unduh Langsung |
 |---|---|---|
-| **PASEO-SENSI-v1.0.0.apk** | **Versi Release Resmi (Siap Pakai)** | 🚀 **[Download Release APK](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0.apk)** |
-| **PASEO-SENSI-v1.0.0-debug.apk** | Versi Debug Pengujian | 🛠️ **[Download Debug APK](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0-debug.apk)** |
-| **PASEO-SENSI-v1.0.0-source.zip** | Arsip Source Code Lengkap | 📦 **[Download Source ZIP](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0-source.zip)** |
+| **PASEO-SENSI-v1.0.0.apk** | **Versi Release Resmi (Siap Pakai)** | 🚀 **[Download Release APK (Direct)](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** |
+| **PASEO-SENSI-v1.0.0-debug.apk** | Versi Debug Pengujian | 🛠️ **[Download Debug APK](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-debug.apk)** |
+| **PASEO-SENSI-v1.0.0-source.zip** | Arsip Source Code Lengkap | 📦 **[Download Source ZIP](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-source.zip)** |
 
-> 🌐 **Halaman GitHub Releases Lengkap:**  
-> [https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/tag/v1.0.0](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/tag/v1.0.0)
+> 🌐 **Halaman Rilis GitHub Terbaru:**  
+> [https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest)
 
 ---
 
 ## 📱 Petunjuk Instalasi di HP Android
 
 1. **Unduh Berkas APK:**
-   - Ketuk tautan **[Download Release APK](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/download/v1.0.0/PASEO-SENSI-v1.0.0.apk)** langsung dari peramban HP Anda (Google Chrome, Samsung Internet, Mi Browser, dll.).
+   - Ketuk tautan **[Download Release APK](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** langsung dari peramban HP Anda (Google Chrome, Samsung Internet, Mi Browser, dll.).
 2. **Peringatan Keamanan Peramban:**
-   - Jika peramban memunculkan dialog *"File mungkin berbahaya / File might be harmful"* (peringatan standar Android untuk instalasi di luar Play Store), pilih opsi **Tetap unduh / Download anyway**.
+   - Jika peramban memunculkan dialog *"File mungkin berbahaya / File might be harmful"* (peringatan standar Android untuk berkas APK di luar Play Store), pilih opsi **Tetap unduh / Download anyway**.
 3. **Buka Berkas APK:**
    - Setelah unduhan selesai, buka notifikasi atau cari file di aplikasi **Pengelola File (File Manager)** pada folder **Download**.
 4. **Izinkan Instalasi dari Sumber Tidak Dikenal:**
    - Jika sistem Android meminta izin instalasi, ketuk **Pengaturan (Settings)** dan aktifkan opsi **"Izinkan dari sumber ini / Allow from this source"**.
 5. **Selesaikan Instalasi:**
    - Ketuk **Instal (Install)** dan tunggu beberapa detik hingga selesai.
-   - Buka aplikasi **PASEO SENSI** dan mulai konfigurasi gaming Anda!
+   - Buka aplikasi **PASEO SENSI** dan nikmati performa gaming responsif!
+
+---
+
+## ⚙️ Pengaturan GitHub Actions (Untuk Pemilik Repositori)
+
+Agar alur kerja GitHub Actions dapat mempublikasikan release dan mengunggah aset APK secara otomatis tanpa error HTTP 403, pastikan izin berikut aktif pada repositori GitHub Anda:
+
+1. Masuk ke halaman repositori di GitHub: `https://github.com/zuccheroxix-lab/PASEO-TOOLS-`
+2. Buka menu **Settings** > **Actions** > **General**.
+3. Gulir ke bawah ke bagian **Workflow permissions**.
+4. Pilih opsi **"Read and write permissions"**.
+5. Centang opsi **"Allow GitHub Actions to create and approve pull requests"**.
+6. Klik **Save**.
+7. Buka tab **Actions** > Pilih workflow **"Build and Release PASEO SENSI APK"** > Klik **Run workflow** untuk memicu build dan publikasi release terbaru secara otomatis.
 
 ---
 
@@ -129,28 +143,6 @@ Unduh versi resmi aplikasi langsung ke perangkat Android Anda tanpa perlu kompil
 ```bash
 adb shell sh /sdcard/Android/data/moe.shizuku.privileged.api/start.sh
 ```
-
----
-
-## 📦 Cara Membangun Proyek (Build Lokal)
-
-```bash
-# Clone repositori
-git clone https://github.com/zuccheroxix-lab/PASEO-TOOLS-.git
-cd PASEO-TOOLS-
-
-# Beri izin eksekusi Gradle Wrapper
-chmod +x gradlew
-
-# Build Debug APK
-./gradlew assembleDebug
-
-# Build Release APK
-./gradlew assembleRelease
-```
-Berkas APK akan berada di:
-- `app/build/outputs/apk/release/PASEO-SENSI-v1.0.0.apk`
-- `app/build/outputs/apk/debug/PASEO-SENSI-v1.0.0-debug.apk`
 
 ---
 
