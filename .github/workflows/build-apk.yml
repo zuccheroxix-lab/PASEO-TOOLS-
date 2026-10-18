@@ -30,8 +30,47 @@ jobs:
           java-version: "17"
           cache: "gradle"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK & Accept Licenses
+        run: |
+          echo "=== Configuring Android SDK Environment ==="
+          # Use pre-installed Android SDK on GitHub Actions runner
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+
+          # Locate sdkmanager executable
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          elif [ -d "$ANDROID_HOME/cmdline-tools/bin" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/bin/sdkmanager"
+            echo "$ANDROID_HOME/cmdline-tools/bin" >> $GITHUB_PATH
+          else
+            SDKMANAGER=$(which sdkmanager || find "$ANDROID_HOME" -name sdkmanager -type f | head -n 1)
+            if [ -n "$SDKMANAGER" ]; then
+              echo "$(dirname "$SDKMANAGER")" >> $GITHUB_PATH
+            fi
+          fi
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+
+          echo "ANDROID_HOME is: $ANDROID_HOME"
+          echo "sdkmanager path: $SDKMANAGER"
+
+          # Pre-seed Android SDK license hashes
+          mkdir -p "$ANDROID_HOME/licenses"
+          printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n" > "$ANDROID_HOME/licenses/android-sdk-license"
+          printf "84831b9409646a918e30573bab4c9c91346d8abd\n504667f4c0de7af1a06de9f4b1727b84351f2910\n" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
+          printf "601085b94cd77f0b54ff86406957099ebe79c4d6\n" > "$ANDROID_HOME/licenses/android-googletv-license"
+          printf "33b6a2b64607f11b759f320ef9dff4ae5c47d97a\n" > "$ANDROID_HOME/licenses/google-gdk-license"
+          printf "e9acab5b5fbb560a72cfaecce8946896ff6aab9d\n" > "$ANDROID_HOME/licenses/mips-android-sysimage-license"
+
+          # Auto-accept all licenses via sdkmanager
+          if [ -n "$SDKMANAGER" ] && [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses || true
+            echo "Installing platforms;android-36 and build-tools;36.0.0..."
+            "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0" || true
+          fi
 
       - name: Make Gradle Wrapper Executable
         run: chmod +x gradlew
@@ -50,7 +89,7 @@ jobs:
             echo "STORE_PASSWORD=${KEYSTORE_PASSWORD}" >> $GITHUB_ENV
             echo "KEY_PASSWORD=${KEY_PASSWORD}" >> $GITHUB_ENV
           else
-            echo "Notice: KEYSTORE_BASE64 secret not found. Using debug key as fallback for release testing."
+            echo "Notice: KEYSTORE_BASE64 secret not found. Generating release upload keystore fallback..."
             if [ -f debug.keystore ]; then
               cp debug.keystore my-upload-key.jks
             else
@@ -61,18 +100,37 @@ jobs:
             echo "KEY_PASSWORD=android" >> $GITHUB_ENV
           fi
 
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: Copy & Rename APKs
+      - name: Verify & Package Output APKs
         run: |
           mkdir -p output-apks
-          find app/build/outputs/apk/debug -name "*.apk" -exec cp {} output-apks/PASEO_SENSI_v1.0.0_debug.apk \;
-          find app/build/outputs/apk/release -name "*.apk" -exec cp {} output-apks/PASEO_SENSI_v1.0.0_release.apk \;
-          ls -la output-apks/
+
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+
+          if [ -z "$DEBUG_APK" ] || [ ! -f "$DEBUG_APK" ]; then
+            echo "Error: Debug APK not found!"
+            exit 1
+          fi
+
+          if [ -z "$RELEASE_APK" ] || [ ! -f "$RELEASE_APK" ]; then
+            echo "Error: Release APK not found!"
+            exit 1
+          fi
+
+          cp "$DEBUG_APK" output-apks/PASEO_SENSI_v1.0.0_debug.apk
+          cp "$RELEASE_APK" output-apks/PASEO_SENSI_v1.0.0_release.apk
+
+          echo "=== Generated APK Files ==="
+          ls -lh output-apks/
 
       - name: Upload APKs as Artifacts
         uses: actions/upload-artifact@v4
