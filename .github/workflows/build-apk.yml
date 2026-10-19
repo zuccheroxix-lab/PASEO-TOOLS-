@@ -22,6 +22,12 @@ jobs:
     name: Build Debug and Release APK
     runs-on: ubuntu-latest
 
+    env:
+      KEYSTORE_PATH: my-upload-key.jks
+      STORE_PASSWORD: android
+      KEY_PASSWORD: android
+      KEY_ALIAS: upload
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -83,31 +89,43 @@ jobs:
       - name: Prepare Signing Key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE_PASSWORD_SECRET: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD_SECRET: ${{ secrets.KEY_PASSWORD }}
         run: |
+          echo "=== Configuring Release Signing Credentials ==="
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Decoding release keystore from GitHub Secrets..."
+            echo "Decoding custom release keystore from GitHub Secrets..."
             echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
-            echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
-            echo "STORE_PASSWORD=${KEYSTORE_PASSWORD}" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=${KEY_PASSWORD}" >> $GITHUB_ENV
-          else
-            echo "Notice: KEYSTORE_BASE64 secret not found. Generating release upload keystore with alias upload..."
+          elif [ ! -f my-upload-key.jks ]; then
+            echo "Creating persistent upload keystore..."
             keytool -genkeypair -v -keystore my-upload-key.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=ZuccheroXann, OU=Development, O=PaseoSensi, L=City, S=State, C=ID"
-            echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
-            echo "STORE_PASSWORD=android" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=android" >> $GITHUB_ENV
+          else
+            echo "Using existing persistent my-upload-key.jks keystore."
           fi
 
+          STORE_PASS="${STORE_PASSWORD_SECRET:-android}"
+          KEY_PASS="${KEY_PASSWORD_SECRET:-android}"
+
+          echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
+          echo "STORE_PASSWORD=${STORE_PASS}" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=${KEY_PASS}" >> $GITHUB_ENV
+
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build Debug and Release APK
-        run: ./gradlew assembleDebug assembleRelease --stacktrace
+        env:
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          STORE_PASSWORD: ${{ env.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
+          KEY_ALIAS: upload
+        run: |
+          echo "=== Building Debug APK ==="
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          echo "=== Building Release APK ==="
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Package and Verify Output Assets
+      - name: Verify and Package APKs
         run: |
           mkdir -p output-apks
 
@@ -115,24 +133,32 @@ jobs:
           RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -n 1)
 
           if [ -z "$DEBUG_APK" ] || [ ! -f "$DEBUG_APK" ]; then
-            echo "Error: Debug APK not found!"
+            echo "Error: Debug APK was not generated!"
             exit 1
           fi
 
           if [ -z "$RELEASE_APK" ] || [ ! -f "$RELEASE_APK" ]; then
-            echo "Error: Release APK not found!"
+            echo "Error: Release APK was not generated!"
             exit 1
           fi
 
-          # Verify minimum size (must be valid APK > 1MB)
+          echo "Validating archive integrity of APKs..."
+          unzip -t "$DEBUG_APK" > /dev/null
+          unzip -t "$RELEASE_APK" > /dev/null
+          echo "Archive integrity verified: valid Android APK packages."
+
+          DEBUG_SIZE=$(stat -c%s "$DEBUG_APK" 2>/dev/null || stat -f%z "$DEBUG_APK")
           RELEASE_SIZE=$(stat -c%s "$RELEASE_APK" 2>/dev/null || stat -f%z "$RELEASE_APK")
-          echo "Verified Release APK size: $RELEASE_SIZE bytes"
-          if [ "$RELEASE_SIZE" -lt 1000000 ]; then
-            echo "Error: Generated Release APK is suspiciously small ($RELEASE_SIZE bytes)!"
+
+          echo "Debug APK size: $DEBUG_SIZE bytes"
+          echo "Release APK size: $RELEASE_SIZE bytes"
+
+          if [ "$RELEASE_SIZE" -lt 5000000 ]; then
+            echo "Error: Release APK size ($RELEASE_SIZE bytes) is suspiciously small!"
             exit 1
           fi
 
-          # Output naming: PASEO-SENSI-v1.0.0.apk (official release APK)
+          # Output naming: PASEO-SENSI-v1.0.0.apk
           cp "$RELEASE_APK" output-apks/PASEO-SENSI-v1.0.0.apk
           cp "$DEBUG_APK" output-apks/PASEO-SENSI-v1.0.0-debug.apk
 
@@ -144,7 +170,7 @@ jobs:
             -x "*output-apks*" \
             -x "*.idea*"
 
-          echo "=== Verified Assets Ready for Upload ==="
+          echo "=== Verified Output Assets ==="
           ls -lh output-apks/
 
       - name: Upload APKs as Artifacts

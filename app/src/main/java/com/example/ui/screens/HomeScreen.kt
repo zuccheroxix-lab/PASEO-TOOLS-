@@ -32,10 +32,10 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Launch
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VpnKey
@@ -254,7 +254,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.HelpOutline, contentDescription = null, tint = CrimsonGlow, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null, tint = CrimsonGlow, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Panduan Setup Shizuku (Wireless Debugging)",
@@ -464,7 +464,7 @@ fun HomeScreen(
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = CrimsonGlow)
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = CrimsonGlow)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("GitHub Repo", color = TextPrimary, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
                         }
