@@ -86,6 +86,30 @@ jobs:
       - name: Make Gradle Wrapper Executable
         run: chmod +x gradlew
 
+      - name: Setup Android Debug Keystore
+        run: |
+          echo "=== Setting up Android Debug Keystore ==="
+          mkdir -p ~/.android
+          if [ -f debug.keystore.base64 ] && [ ! -f debug.keystore ]; then
+            echo "Decoding debug.keystore from debug.keystore.base64..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+          if [ ! -f debug.keystore ]; then
+            echo "Generating standard debug.keystore with keytool..."
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          cp debug.keystore ~/.android/debug.keystore
+          echo "Debug keystores verified:"
+          ls -l debug.keystore ~/.android/debug.keystore
+
       - name: Prepare Signing Key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -111,19 +135,18 @@ jobs:
           echo "KEY_PASSWORD=${KEY_PASS}" >> $GITHUB_ENV
 
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build Debug and Release APK
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Build Release APK
         env:
           KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
           STORE_PASSWORD: ${{ env.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
           KEY_ALIAS: upload
-        run: |
-          echo "=== Building Debug APK ==="
-          ./gradlew assembleDebug --no-daemon --stacktrace
-          echo "=== Building Release APK ==="
-          ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: Verify and Package APKs
         run: |
@@ -158,7 +181,9 @@ jobs:
             exit 1
           fi
 
-          # Output naming: PASEO-SENSI-v1.0.0.apk
+          # Output naming: PASEO-SENSI-release.apk & PASEO-SENSI-debug.apk (and versioned aliases)
+          cp "$RELEASE_APK" output-apks/PASEO-SENSI-release.apk
+          cp "$DEBUG_APK" output-apks/PASEO-SENSI-debug.apk
           cp "$RELEASE_APK" output-apks/PASEO-SENSI-v1.0.0.apk
           cp "$DEBUG_APK" output-apks/PASEO-SENSI-v1.0.0-debug.apk
 
@@ -221,6 +246,8 @@ jobs:
             - **Sensi Pack & Aim Trick 15%:** Profil kalibrasi sensitivitas sentuh dan mikro-tuning yang aman dan etis tanpa cheat.
             - **Game Launcher:** Pendeteksi game dan aplikasi terpasang nyata dengan integrasi package manager Android.
           files: |
+            output-apks/PASEO-SENSI-release.apk
+            output-apks/PASEO-SENSI-debug.apk
             output-apks/PASEO-SENSI-v1.0.0.apk
             output-apks/PASEO-SENSI-v1.0.0-debug.apk
             output-apks/PASEO-SENSI-v1.0.0-source.zip

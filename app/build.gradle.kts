@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Base64
 
 plugins {
   alias(libs.plugins.android.application)
@@ -46,7 +47,23 @@ android {
       }
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
+      val rootDebugKey = file("${rootDir}/debug.keystore")
+      val base64Key = file("${rootDir}/debug.keystore.base64")
+      val userHomeDebugKey = file("${System.getProperty("user.home")}/.android/debug.keystore")
+
+      // Automatically restore debug.keystore if not present (e.g. fresh git clone on CI/CD runner)
+      if (!rootDebugKey.exists() && base64Key.exists()) {
+        try {
+          val decoded = Base64.getDecoder().decode(base64Key.readText().trim())
+          rootDebugKey.writeBytes(decoded)
+        } catch (_: Exception) {}
+      }
+
+      storeFile = when {
+        rootDebugKey.exists() -> rootDebugKey
+        userHomeDebugKey.exists() -> userHomeDebugKey
+        else -> rootDebugKey
+      }
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"

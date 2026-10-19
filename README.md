@@ -16,8 +16,9 @@ Unduh versi resmi aplikasi langsung ke perangkat Android Anda tanpa perlu kompil
 
 | Berkas | Deskripsi | Tautan Unduh Langsung |
 |---|---|---|
-| **PASEO-SENSI-v1.0.0.apk** | **Versi Release Resmi (Siap Pakai)** | 🚀 **[Download Release APK (Direct)](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** |
-| **PASEO-SENSI-v1.0.0-debug.apk** | Versi Debug Pengujian | 🛠️ **[Download Debug APK](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-debug.apk)** |
+| **PASEO-SENSI-release.apk** | **Versi Release Resmi (Siap Pasang)** | 🚀 **[Download Release APK (Direct)](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-release.apk)** |
+| **PASEO-SENSI-v1.0.0.apk** | Alternatif Nama Versi Release v1.0.0 | 🚀 **[Download Release v1.0.0](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** |
+| **PASEO-SENSI-debug.apk** | Versi Debug Pengujian | 🛠️ **[Download Debug APK](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-debug.apk)** |
 | **PASEO-SENSI-v1.0.0-source.zip** | Arsip Source Code Lengkap | 📦 **[Download Source ZIP](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-source.zip)** |
 
 > 🌐 **Halaman Rilis GitHub Terbaru:**  
