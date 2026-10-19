@@ -140,6 +140,32 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
+      - name: Verify and Package Debug APK
+        run: |
+          mkdir -p output-apks
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
+          if [ -z "$DEBUG_APK" ] || [ ! -f "$DEBUG_APK" ]; then
+            echo "Error: Debug APK was not generated!"
+            exit 1
+          fi
+
+          echo "Validating debug APK archive integrity..."
+          unzip -t "$DEBUG_APK" > /dev/null
+          DEBUG_SIZE=$(stat -c%s "$DEBUG_APK" 2>/dev/null || stat -f%z "$DEBUG_APK")
+          echo "Debug APK verified ($DEBUG_SIZE bytes): $DEBUG_APK"
+
+          cp "$DEBUG_APK" output-apks/PASEO-SENSI-debug.apk
+          cp "$DEBUG_APK" output-apks/PASEO-SENSI-v1.0.0-debug.apk
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PASEO-SENSI-debug-apk
+          path: |
+            output-apks/PASEO-SENSI-debug.apk
+            output-apks/PASEO-SENSI-v1.0.0-debug.apk
+          retention-days: 30
+
       - name: Build Release APK
         env:
           KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
@@ -148,44 +174,26 @@ jobs:
           KEY_ALIAS: upload
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Verify and Package APKs
+      - name: Verify and Package Release APK
         run: |
-          mkdir -p output-apks
-
-          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
           RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -n 1)
-
-          if [ -z "$DEBUG_APK" ] || [ ! -f "$DEBUG_APK" ]; then
-            echo "Error: Debug APK was not generated!"
-            exit 1
-          fi
-
           if [ -z "$RELEASE_APK" ] || [ ! -f "$RELEASE_APK" ]; then
             echo "Error: Release APK was not generated!"
             exit 1
           fi
 
-          echo "Validating archive integrity of APKs..."
-          unzip -t "$DEBUG_APK" > /dev/null
+          echo "Validating release APK archive integrity..."
           unzip -t "$RELEASE_APK" > /dev/null
-          echo "Archive integrity verified: valid Android APK packages."
-
-          DEBUG_SIZE=$(stat -c%s "$DEBUG_APK" 2>/dev/null || stat -f%z "$DEBUG_APK")
           RELEASE_SIZE=$(stat -c%s "$RELEASE_APK" 2>/dev/null || stat -f%z "$RELEASE_APK")
-
-          echo "Debug APK size: $DEBUG_SIZE bytes"
-          echo "Release APK size: $RELEASE_SIZE bytes"
+          echo "Release APK verified ($RELEASE_SIZE bytes): $RELEASE_APK"
 
           if [ "$RELEASE_SIZE" -lt 5000000 ]; then
             echo "Error: Release APK size ($RELEASE_SIZE bytes) is suspiciously small!"
             exit 1
           fi
 
-          # Output naming: PASEO-SENSI-release.apk & PASEO-SENSI-debug.apk (and versioned aliases)
           cp "$RELEASE_APK" output-apks/PASEO-SENSI-release.apk
-          cp "$DEBUG_APK" output-apks/PASEO-SENSI-debug.apk
           cp "$RELEASE_APK" output-apks/PASEO-SENSI-v1.0.0.apk
-          cp "$DEBUG_APK" output-apks/PASEO-SENSI-v1.0.0-debug.apk
 
           # Package full source code ZIP
           zip -r output-apks/PASEO-SENSI-v1.0.0-source.zip . \
@@ -198,7 +206,7 @@ jobs:
           echo "=== Verified Output Assets ==="
           ls -lh output-apks/
 
-      - name: Upload APKs as Artifacts
+      - name: Upload All Release Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PASEO-SENSI-v1.0.0-assets
@@ -223,8 +231,9 @@ jobs:
             **Created by: ZUCCHERO XANN — DEVELOPER**
             
             ### 📥 Unduhan Langsung APK (Android):
-            - 🚀 **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** (APK Release Siap Pasang)
-            - 🛠️ **[Download PASEO-SENSI-v1.0.0-debug.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-debug.apk)** (APK Debug Pengujian)
+            - 🚀 **[Download PASEO-SENSI-release.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-release.apk)** (APK Release Siap Pasang)
+            - 🚀 **[Download PASEO-SENSI-v1.0.0.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0.apk)** (Alternatif Nama Rilis)
+            - 🛠️ **[Download PASEO-SENSI-debug.apk](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-debug.apk)** (APK Debug Pengujian)
             - 📦 **[Download PASEO-SENSI-v1.0.0-source.zip](https://github.com/zuccheroxix-lab/PASEO-TOOLS-/releases/latest/download/PASEO-SENSI-v1.0.0-source.zip)** (Source Code Lengkap)
             
             ---
