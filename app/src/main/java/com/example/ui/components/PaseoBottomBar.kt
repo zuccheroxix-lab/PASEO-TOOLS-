@@ -1,17 +1,18 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -28,10 +29,9 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.MainTab
 import com.example.ui.theme.CrimsonGlow
 import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.PaseoBorderGreen
-import com.example.ui.theme.PaseoDarkBackground
+import com.example.ui.theme.PaseoBorderDark
+import com.example.ui.theme.PaseoSurfaceDark
 import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
 
 @Composable
 fun PaseoBottomBar(
@@ -42,26 +42,26 @@ fun PaseoBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .border(0.5.dp, PaseoBorderGreen.copy(alpha = 0.5f)),
-        containerColor = Color(0xFF090E0C),
+            .border(0.5.dp, PaseoBorderDark),
+        containerColor = PaseoSurfaceDark,
         tonalElevation = 8.dp
     ) {
-        // Tab 1: Home
-        val isHomeSelected = selectedTab == MainTab.HOME
+        // Tab 1: Beranda
+        val isBeranda = selectedTab == MainTab.BERANDA
         NavigationBarItem(
-            selected = isHomeSelected,
-            onClick = { onTabSelected(MainTab.HOME) },
+            selected = isBeranda,
+            onClick = { onTabSelected(MainTab.BERANDA) },
             icon = {
                 Icon(
-                    imageVector = if (isHomeSelected) Icons.Filled.Home else Icons.Outlined.Home,
-                    contentDescription = "Home Tab"
+                    imageVector = if (isBeranda) Icons.Filled.Home else Icons.Outlined.Home,
+                    contentDescription = "Beranda"
                 )
             },
             label = {
                 Text(
-                    text = "Home",
-                    fontWeight = if (isHomeSelected) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 12.sp
+                    text = "Beranda",
+                    fontWeight = if (isBeranda) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp
                 )
             },
             colors = NavigationBarItemDefaults.colors(
@@ -71,25 +71,25 @@ fun PaseoBottomBar(
                 unselectedIconColor = TextMuted,
                 unselectedTextColor = TextMuted
             ),
-            modifier = Modifier.testTag("nav_tab_home")
+            modifier = Modifier.testTag("nav_tab_beranda")
         )
 
-        // Tab 2: Apps (Game Launcher)
-        val isAppsSelected = selectedTab == MainTab.APPS
+        // Tab 2: Tools
+        val isTools = selectedTab == MainTab.TOOLS
         NavigationBarItem(
-            selected = isAppsSelected,
-            onClick = { onTabSelected(MainTab.APPS) },
+            selected = isTools,
+            onClick = { onTabSelected(MainTab.TOOLS) },
             icon = {
                 Icon(
-                    imageVector = if (isAppsSelected) Icons.Filled.SportsEsports else Icons.Outlined.SportsEsports,
-                    contentDescription = "Apps Launcher Tab"
+                    imageVector = if (isTools) Icons.Filled.Build else Icons.Outlined.Build,
+                    contentDescription = "Tools"
                 )
             },
             label = {
                 Text(
-                    text = "Apps",
-                    fontWeight = if (isAppsSelected) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 12.sp
+                    text = "Tools",
+                    fontWeight = if (isTools) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp
                 )
             },
             colors = NavigationBarItemDefaults.colors(
@@ -99,25 +99,25 @@ fun PaseoBottomBar(
                 unselectedIconColor = TextMuted,
                 unselectedTextColor = TextMuted
             ),
-            modifier = Modifier.testTag("nav_tab_apps")
+            modifier = Modifier.testTag("nav_tab_tools")
         )
 
-        // Tab 3: Game-Labs
-        val isLabsSelected = selectedTab == MainTab.GAME_LABS
+        // Tab 3: Game (Game Launcher)
+        val isGame = selectedTab == MainTab.GAME
         NavigationBarItem(
-            selected = isLabsSelected,
-            onClick = { onTabSelected(MainTab.GAME_LABS) },
+            selected = isGame,
+            onClick = { onTabSelected(MainTab.GAME) },
             icon = {
                 Icon(
-                    imageVector = if (isLabsSelected) Icons.Filled.Science else Icons.Outlined.Science,
-                    contentDescription = "Game Labs Tab"
+                    imageVector = if (isGame) Icons.Filled.SportsEsports else Icons.Outlined.SportsEsports,
+                    contentDescription = "Game"
                 )
             },
             label = {
                 Text(
-                    text = "Game-Labs",
-                    fontWeight = if (isLabsSelected) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 12.sp
+                    text = "Game",
+                    fontWeight = if (isGame) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp
                 )
             },
             colors = NavigationBarItemDefaults.colors(
@@ -127,7 +127,35 @@ fun PaseoBottomBar(
                 unselectedIconColor = TextMuted,
                 unselectedTextColor = TextMuted
             ),
-            modifier = Modifier.testTag("nav_tab_game_labs")
+            modifier = Modifier.testTag("nav_tab_game")
+        )
+
+        // Tab 4: Profil (Developer & Partner)
+        val isProfil = selectedTab == MainTab.PROFIL
+        NavigationBarItem(
+            selected = isProfil,
+            onClick = { onTabSelected(MainTab.PROFIL) },
+            icon = {
+                Icon(
+                    imageVector = if (isProfil) Icons.Filled.Person else Icons.Outlined.Person,
+                    contentDescription = "Profil"
+                )
+            },
+            label = {
+                Text(
+                    text = "Profil",
+                    fontWeight = if (isProfil) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 11.sp
+                )
+            },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = Color.White,
+                selectedTextColor = CrimsonGlow,
+                indicatorColor = CrimsonPrimary,
+                unselectedIconColor = TextMuted,
+                unselectedTextColor = TextMuted
+            ),
+            modifier = Modifier.testTag("nav_tab_profil")
         )
     }
 }

@@ -27,9 +27,25 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 enum class MainTab {
-    HOME,
-    APPS,
-    GAME_LABS
+    BERANDA,
+    TOOLS,
+    GAME,
+    PROFIL;
+
+    companion object {
+        val HOME = BERANDA
+        val APPS = GAME
+        val GAME_LABS = TOOLS
+    }
+}
+
+enum class SubScreen {
+    NONE,
+    GAME_DETAIL,
+    CROSSHAIR_GALLERY,
+    CROSSHAIR_EDITOR,
+    SHIZUKU_PAGE,
+    SETTINGS_PAGE
 }
 
 enum class GameLabsCategory {
@@ -47,9 +63,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val appLauncherRepository = AppLauncherRepository(context)
     val systemMonitorRepository = SystemMonitorRepository(context)
 
-    // Navigation State
-    private val _currentTab = MutableStateFlow(MainTab.HOME)
+    // Navigation & Screen State
+    private val _currentTab = MutableStateFlow(MainTab.BERANDA)
     val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
+
+    private val _currentSubScreen = MutableStateFlow(SubScreen.NONE)
+    val currentSubScreen: StateFlow<SubScreen> = _currentSubScreen.asStateFlow()
+
+    private val _selectedGame = MutableStateFlow<InstalledApp?>(null)
+    val selectedGame: StateFlow<InstalledApp?> = _selectedGame.asStateFlow()
+
+    private val _showSplash = MutableStateFlow(true)
+    val showSplash: StateFlow<Boolean> = _showSplash.asStateFlow()
+
+    // Game Optimizer Toggles State
+    private val _optPerformance = MutableStateFlow(preferencesRepository.isOptPerformanceEnabled())
+    val optPerformance: StateFlow<Boolean> = _optPerformance.asStateFlow()
+
+    private val _optTouch = MutableStateFlow(preferencesRepository.isOptTouchEnabled())
+    val optTouch: StateFlow<Boolean> = _optTouch.asStateFlow()
+
+    private val _optSmartDpi = MutableStateFlow(preferencesRepository.isOptSmartDpiEnabled())
+    val optSmartDpi: StateFlow<Boolean> = _optSmartDpi.asStateFlow()
+
+    private val _optLatency = MutableStateFlow(preferencesRepository.isOptLatencyEnabled())
+    val optLatency: StateFlow<Boolean> = _optLatency.asStateFlow()
+
+    private val _optFastLaunch = MutableStateFlow(preferencesRepository.isOptFastLaunchEnabled())
+    val optFastLaunch: StateFlow<Boolean> = _optFastLaunch.asStateFlow()
+
+    private val _optRogMonitoring = MutableStateFlow(preferencesRepository.isOptRogMonitoringEnabled())
+    val optRogMonitoring: StateFlow<Boolean> = _optRogMonitoring.asStateFlow()
+
+    // Cache Size State
+    private val _cacheSizeFormatted = MutableStateFlow("0.0 KB")
+    val cacheSizeFormatted: StateFlow<String> = _cacheSizeFormatted.asStateFlow()
 
     private val _gameLabsCategory = MutableStateFlow(GameLabsCategory.ALL)
     val gameLabsCategory: StateFlow<GameLabsCategory> = _gameLabsCategory.asStateFlow()
@@ -117,10 +165,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loadApps()
         startTelemetryLoop()
         checkPointerLocationState()
+        refreshCacheSize()
+    }
+
+    fun dismissSplash() {
+        _showSplash.value = false
     }
 
     fun selectTab(tab: MainTab) {
         _currentTab.value = tab
+        _currentSubScreen.value = SubScreen.NONE
+    }
+
+    fun navigateToSubScreen(screen: SubScreen) {
+        _currentSubScreen.value = screen
+    }
+
+    fun closeSubScreen() {
+        _currentSubScreen.value = SubScreen.NONE
+        _selectedGame.value = null
+    }
+
+    fun openGameDetail(game: InstalledApp) {
+        _selectedGame.value = game
+        _currentSubScreen.value = SubScreen.GAME_DETAIL
+    }
+
+    fun setOptPerformance(enabled: Boolean) {
+        _optPerformance.value = enabled
+        preferencesRepository.setOptPerformanceEnabled(enabled)
+    }
+
+    fun setOptTouch(enabled: Boolean) {
+        _optTouch.value = enabled
+        preferencesRepository.setOptTouchEnabled(enabled)
+    }
+
+    fun setOptSmartDpi(enabled: Boolean) {
+        _optSmartDpi.value = enabled
+        preferencesRepository.setOptSmartDpiEnabled(enabled)
+    }
+
+    fun setOptLatency(enabled: Boolean) {
+        _optLatency.value = enabled
+        preferencesRepository.setOptLatencyEnabled(enabled)
+    }
+
+    fun setOptFastLaunch(enabled: Boolean) {
+        _optFastLaunch.value = enabled
+        preferencesRepository.setOptFastLaunchEnabled(enabled)
+    }
+
+    fun setOptRogMonitoring(enabled: Boolean) {
+        _optRogMonitoring.value = enabled
+        preferencesRepository.setOptRogMonitoringEnabled(enabled)
+    }
+
+    fun refreshCacheSize() {
+        viewModelScope.launch {
+            val bytes = preferencesRepository.getAppCacheSize(context)
+            _cacheSizeFormatted.value = formatBytes(bytes)
+        }
+    }
+
+    fun clearCache() {
+        viewModelScope.launch {
+            val success = preferencesRepository.clearAppCache(context)
+            refreshCacheSize()
+            if (success) {
+                showMessage("Cache aplikasi berhasil dibersihkan.")
+            } else {
+                showMessage("Cache sudah bersih.")
+            }
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        return when {
+            bytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+            bytes >= 1024 -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
+            else -> "$bytes B"
+        }
     }
 
     fun selectGameLabsCategory(category: GameLabsCategory) {

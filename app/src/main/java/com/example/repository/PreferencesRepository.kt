@@ -167,5 +167,58 @@ class PreferencesRepository(context: Context) {
         private const val KEY_ORIGINAL_DPI = "original_dpi"
         private const val KEY_SUPPORT_LINK = "support_link"
         private const val KEY_BUG_REPORT_LINK = "bug_report_link"
+
+        private const val KEY_OPT_PERF = "opt_performance"
+        private const val KEY_OPT_TOUCH = "opt_touch"
+        private const val KEY_OPT_SMART_DPI = "opt_smart_dpi"
+        private const val KEY_OPT_LATENCY = "opt_latency"
+        private const val KEY_OPT_FAST_LAUNCH = "opt_fast_launch"
+        private const val KEY_OPT_ROG_MONITORING = "opt_rog_monitoring"
+    }
+
+    // Game Optimizer Toggles
+    fun isOptPerformanceEnabled(): Boolean = prefs.getBoolean(KEY_OPT_PERF, true)
+    fun setOptPerformanceEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_OPT_PERF, enabled).apply()
+
+    fun isOptTouchEnabled(): Boolean = prefs.getBoolean(KEY_OPT_TOUCH, true)
+    fun setOptTouchEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_OPT_TOUCH, enabled).apply()
+
+    fun isOptSmartDpiEnabled(): Boolean = prefs.getBoolean(KEY_OPT_SMART_DPI, false)
+    fun setOptSmartDpiEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_OPT_SMART_DPI, enabled).apply()
+
+    fun isOptLatencyEnabled(): Boolean = prefs.getBoolean(KEY_OPT_LATENCY, true)
+    fun setOptLatencyEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_OPT_LATENCY, enabled).apply()
+
+    fun isOptFastLaunchEnabled(): Boolean = prefs.getBoolean(KEY_OPT_FAST_LAUNCH, false)
+    fun setOptFastLaunchEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_OPT_FAST_LAUNCH, enabled).apply()
+
+    fun isOptRogMonitoringEnabled(): Boolean = prefs.getBoolean(KEY_OPT_ROG_MONITORING, true)
+    fun setOptRogMonitoringEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_OPT_ROG_MONITORING, enabled).apply()
+
+    // Safe Cache Calculator & Cleaner
+    fun getAppCacheSize(context: Context): Long {
+        return try {
+            val cacheDir = context.cacheDir
+            getFolderSize(cacheDir)
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    fun clearAppCache(context: Context): Boolean {
+        return try {
+            context.cacheDir.deleteRecursively()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun getFolderSize(dir: java.io.File?): Long {
+        if (dir == null || !dir.exists()) return 0L
+        var total = 0L
+        dir.listFiles()?.forEach { file ->
+            total += if (file.isDirectory) getFolderSize(file) else file.length()
+        }
+        return total
     }
 }

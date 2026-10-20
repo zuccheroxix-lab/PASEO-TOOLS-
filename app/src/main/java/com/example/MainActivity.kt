@@ -18,7 +18,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -26,11 +28,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.GameLabsCategory
 import com.example.ui.MainTab
 import com.example.ui.MainViewModel
+import com.example.ui.SubScreen
 import com.example.ui.components.PaseoBottomBar
 import com.example.ui.components.PaseoHeader
-import com.example.ui.screens.AppsScreen
+import com.example.ui.screens.CrosshairStudioScreen
+import com.example.ui.screens.GameDetailScreen
 import com.example.ui.screens.GameLabsScreen
+import com.example.ui.screens.GameLauncherScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.ProfileScreen
+import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.ShizukuScreen
+import com.example.ui.screens.SplashScreen
 import com.example.ui.theme.CrimsonContainer
 import com.example.ui.theme.CrimsonGlow
 import com.example.ui.theme.MyApplicationTheme
@@ -60,12 +69,20 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun PaseoSensiApp(viewModel: MainViewModel) {
+    var showSplash by remember { mutableStateOf(true) }
+
+    if (showSplash) {
+        SplashScreen(onDismiss = { showSplash = false })
+        return
+    }
+
     val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
+    val currentSubScreen by viewModel.currentSubScreen.collectAsStateWithLifecycle()
+    val selectedGame by viewModel.selectedGame.collectAsStateWithLifecycle()
     val shizukuInfo by viewModel.shizukuInfo.collectAsStateWithLifecycle()
     val deviceInfo by viewModel.deviceInfo.collectAsStateWithLifecycle()
     val filteredApps by viewModel.filteredApps.collectAsStateWithLifecycle()
     val appSearchQuery by viewModel.appSearchQuery.collectAsStateWithLifecycle()
-    val appFilterOnlyGames by viewModel.appFilterOnlyGames.collectAsStateWithLifecycle()
     val isAppsLoading by viewModel.isAppsLoading.collectAsStateWithLifecycle()
     val crosshairConfig by viewModel.crosshairConfig.collectAsStateWithLifecycle()
     val activeProfile by viewModel.activeProfile.collectAsStateWithLifecycle()
@@ -83,76 +100,118 @@ fun PaseoSensiApp(viewModel: MainViewModel) {
         }
     }
 
-    // Handle system back navigation to return to Home tab first
-    BackHandler(enabled = currentTab != MainTab.HOME) {
-        viewModel.selectTab(MainTab.HOME)
+    // Handle system back navigation: pop subscreen first, or return to Beranda tab
+    BackHandler(enabled = currentSubScreen != SubScreen.NONE || currentTab != MainTab.BERANDA) {
+        if (currentSubScreen != SubScreen.NONE) {
+            viewModel.closeSubScreen()
+        } else {
+            viewModel.selectTab(MainTab.BERANDA)
+        }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = PaseoDarkBackground,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            PaseoHeader(
-                shizukuInfo = shizukuInfo,
-                onStatusClick = { viewModel.selectTab(MainTab.HOME) }
-            )
-        },
-        bottomBar = {
-            PaseoBottomBar(
-                selectedTab = currentTab,
-                onTabSelected = { viewModel.selectTab(it) }
-            )
-        },
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState) { data ->
-                Snackbar(
-                    snackbarData = data,
-                    containerColor = CrimsonContainer,
-                    contentColor = Color.White,
-                    actionColor = CrimsonGlow
+    if (currentSubScreen != SubScreen.NONE) {
+        when (currentSubScreen) {
+            SubScreen.GAME_DETAIL -> {
+                val game = selectedGame
+                if (game != null) {
+                    GameDetailScreen(
+                        game = game,
+                        viewModel = viewModel,
+                        onBack = { viewModel.closeSubScreen() }
+                    )
+                } else {
+                    viewModel.closeSubScreen()
+                }
+            }
+            SubScreen.CROSSHAIR_GALLERY, SubScreen.CROSSHAIR_EDITOR -> {
+                CrosshairStudioScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.closeSubScreen() }
                 )
             }
+            SubScreen.SHIZUKU_PAGE -> {
+                ShizukuScreen(
+                    viewModel = viewModel,
+                    shizukuInfo = shizukuInfo,
+                    onBack = { viewModel.closeSubScreen() }
+                )
+            }
+            SubScreen.SETTINGS_PAGE -> {
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.closeSubScreen() }
+                )
+            }
+            SubScreen.NONE -> {}
         }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(PaseoDarkBackground)
-        ) {
-            when (currentTab) {
-                MainTab.HOME -> {
-                    HomeScreen(
-                        viewModel = viewModel,
-                        shizukuInfo = shizukuInfo,
-                        deviceInfo = deviceInfo
+    } else {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = PaseoDarkBackground,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                PaseoHeader(
+                    shizukuInfo = shizukuInfo,
+                    onStatusClick = { viewModel.navigateToSubScreen(SubScreen.SHIZUKU_PAGE) }
+                )
+            },
+            bottomBar = {
+                PaseoBottomBar(
+                    selectedTab = currentTab,
+                    onTabSelected = { viewModel.selectTab(it) }
+                )
+            },
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        containerColor = CrimsonContainer,
+                        contentColor = Color.White,
+                        actionColor = CrimsonGlow
                     )
                 }
-                MainTab.APPS -> {
-                    AppsScreen(
-                        apps = filteredApps,
-                        searchQuery = appSearchQuery,
-                        onSearchQueryChange = { viewModel.setAppSearchQuery(it) },
-                        onlyGames = appFilterOnlyGames,
-                        onOnlyGamesChange = { viewModel.setAppFilterOnlyGames(it) },
-                        isLoading = isAppsLoading,
-                        onRefresh = { viewModel.loadApps() },
-                        onLaunchApp = { viewModel.launchApp(it) }
-                    )
-                }
-                MainTab.GAME_LABS -> {
-                    GameLabsScreen(
-                        viewModel = viewModel,
-                        shizukuInfo = shizukuInfo,
-                        deviceInfo = deviceInfo,
-                        crosshairConfig = crosshairConfig,
-                        activeProfile = activeProfile,
-                        pointerLocationActive = pointerLocationActive,
-                        selectedCategory = gameLabsCategory,
-                        onCategorySelected = { viewModel.selectGameLabsCategory(it) },
-                        lastTelemetryTime = lastTelemetryTime
-                    )
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(PaseoDarkBackground)
+            ) {
+                when (currentTab) {
+                    MainTab.BERANDA -> {
+                        HomeScreen(
+                            viewModel = viewModel,
+                            shizukuInfo = shizukuInfo,
+                            deviceInfo = deviceInfo
+                        )
+                    }
+                    MainTab.TOOLS -> {
+                        GameLabsScreen(
+                            viewModel = viewModel,
+                            shizukuInfo = shizukuInfo,
+                            deviceInfo = deviceInfo,
+                            crosshairConfig = crosshairConfig,
+                            activeProfile = activeProfile,
+                            pointerLocationActive = pointerLocationActive,
+                            selectedCategory = gameLabsCategory,
+                            onCategorySelected = { viewModel.selectGameLabsCategory(it) },
+                            lastTelemetryTime = lastTelemetryTime
+                        )
+                    }
+                    MainTab.GAME -> {
+                        GameLauncherScreen(
+                            viewModel = viewModel,
+                            apps = filteredApps,
+                            searchQuery = appSearchQuery,
+                            onSearchQueryChange = { viewModel.setAppSearchQuery(it) },
+                            isLoading = isAppsLoading,
+                            onGameClick = { viewModel.openGameDetail(it) }
+                        )
+                    }
+                    MainTab.PROFIL -> {
+                        ProfileScreen(viewModel = viewModel)
+                    }
                 }
             }
         }

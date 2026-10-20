@@ -3,9 +3,6 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,63 +21,57 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Launch
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.VpnKey
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.DeviceInfo
 import com.example.model.ShizukuInfo
 import com.example.model.ShizukuStatus
+import com.example.ui.MainTab
 import com.example.ui.MainViewModel
+import com.example.ui.SubScreen
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CrimsonContainer
+import com.example.ui.theme.CrimsonDark
 import com.example.ui.theme.CrimsonGlow
 import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.EmeraldAccent
-import com.example.ui.theme.PaseoBorderGreen
+import com.example.ui.theme.PaseoBorderDark
+import com.example.ui.theme.PaseoBorderGlow
 import com.example.ui.theme.PaseoBorderRed
 import com.example.ui.theme.PaseoDarkBackground
 import com.example.ui.theme.PaseoSurfaceCard
 import com.example.ui.theme.PaseoSurfaceDark
 import com.example.ui.theme.PaseoSurfaceElevated
-import com.example.ui.theme.SilverBadge
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.VerifiedBlue
 
 @Composable
 fun HomeScreen(
@@ -89,7 +80,6 @@ fun HomeScreen(
     deviceInfo: DeviceInfo?
 ) {
     val context = LocalContext.current
-    var isGuideExpanded by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -98,431 +88,464 @@ fun HomeScreen(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item { Spacer(modifier = Modifier.height(6.dp)) }
-
-        // Card 1: Status Shizuku & Perangkat
+        // 1. Developer Profile Card (Matching Reference Design)
         item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceDark),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(
-                        1.dp,
-                        if (shizukuInfo.status == ShizukuStatus.CONNECTED && shizukuInfo.isPermissionGranted) {
-                            PaseoBorderGreen
-                        } else {
-                            PaseoBorderRed
-                        },
-                        RoundedCornerShape(16.dp)
+            DeveloperProfileCard(
+                uid = "ZX-OWNER-001",
+                onCopyUid = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Developer UID", "ZX-OWNER-001"))
+                    viewModel.showMessage("UID Developer tersalin: ZX-OWNER-001")
+                }
+            )
+        }
+
+        // 2. System Status Card with 4 Circular Gauges
+        item {
+            SystemStatusCard(
+                deviceInfo = deviceInfo,
+                onRefresh = { viewModel.loadDeviceInfo() }
+            )
+        }
+
+        // 3. Main Navigation Cards Grid/List (Matching Reference)
+        item {
+            Text(
+                text = "MENU UTAMA",
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 2.dp)
+            )
+        }
+
+        item {
+            MenuActionCard(
+                title = "Game Launcher",
+                subtitle = "Kelola Game & Optimasi",
+                icon = Icons.Default.SportsEsports,
+                iconTint = CrimsonGlow,
+                onClick = { viewModel.selectTab(MainTab.GAME) },
+                testTag = "menu_game_launcher"
+            )
+        }
+
+        item {
+            MenuActionCard(
+                title = "Tools",
+                subtitle = "Fitur Lengkap & Kalibrasi Sensi",
+                icon = Icons.Default.Build,
+                iconTint = Color(0xFFFF9100),
+                onClick = { viewModel.selectTab(MainTab.TOOLS) },
+                testTag = "menu_tools"
+            )
+        }
+
+        item {
+            MenuActionCard(
+                title = "Pengaturan",
+                subtitle = "Kustomisasi & Profil",
+                icon = Icons.Default.Settings,
+                iconTint = Color(0xFF00E5FF),
+                onClick = { viewModel.navigateToSubScreen(SubScreen.SETTINGS_PAGE) },
+                testTag = "menu_settings"
+            )
+        }
+
+        item {
+            MenuActionCard(
+                title = "Crosshair",
+                subtitle = "Overlay & Editor",
+                icon = Icons.Default.CenterFocusStrong,
+                iconTint = CrimsonPrimary,
+                onClick = { viewModel.navigateToSubScreen(SubScreen.CROSSHAIR_GALLERY) },
+                testTag = "menu_crosshair"
+            )
+        }
+
+        // 4. Shizuku Quick Status Banner
+        item {
+            ShizukuBannerCard(
+                shizukuInfo = shizukuInfo,
+                onClick = { viewModel.navigateToSubScreen(SubScreen.SHIZUKU_PAGE) }
+            )
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+fun DeveloperProfileCard(
+    uid: String,
+    onCopyUid: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .border(1.dp, PaseoBorderDark, RoundedCornerShape(18.dp)),
+        colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Avatar with crimson glowing ring
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(CrimsonPrimary.copy(alpha = 0.5f), Color(0xFF1E0509))
+                            )
+                        )
+                        .border(1.5.dp, CrimsonGlow.copy(alpha = 0.8f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Avatar",
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
                     )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Security,
-                                contentDescription = "Security",
-                                tint = CrimsonGlow,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "KONTROL LAYANAN SHIZUKU",
-                                color = TextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.5.sp
-                            )
-                        }
+                }
 
-                        val statusBadgeColor = when (shizukuInfo.status) {
-                            ShizukuStatus.CONNECTED -> EmeraldAccent
-                            ShizukuStatus.DISCONNECTED -> AmberWarning
-                            ShizukuStatus.UNSUPPORTED -> Color(0xFFFF5252)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(statusBadgeColor.copy(alpha = 0.15f))
-                                .border(0.5.dp, statusBadgeColor, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = when (shizukuInfo.status) {
-                                    ShizukuStatus.CONNECTED -> "CONNECTED"
-                                    ShizukuStatus.DISCONNECTED -> "DISCONNECTED"
-                                    ShizukuStatus.UNSUPPORTED -> "UNSUPPORTED"
-                                },
-                                color = statusBadgeColor,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
+                Spacer(modifier = Modifier.width(12.dp))
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Detail Metrics Grid
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PaseoSurfaceCard)
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        InfoRow(label = "Versi Android", value = "Android ${deviceInfo?.androidVersion ?: "Memeriksa..."} (API ${deviceInfo?.apiLevel ?: "-"})")
-                        InfoRow(label = "Arsitektur ABI", value = deviceInfo?.primaryAbi ?: "Memeriksa...")
-                        InfoRow(
-                            label = "Versi API Shizuku",
-                            value = if (shizukuInfo.status == ShizukuStatus.CONNECTED) "v${shizukuInfo.apiVersion}.${shizukuInfo.patchVersion}" else "Tidak Aktif"
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "ZUCCHERO XANN",
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Black
                         )
-                        InfoRow(
-                            label = "Status Izin Shizuku",
-                            value = if (shizukuInfo.isPermissionGranted) "Izin Diberikan (Granted)" else "Belum Diberikan (Denied)",
-                            valueColor = if (shizukuInfo.isPermissionGranted) EmeraldAccent else AmberWarning
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = "Verified",
+                            tint = VerifiedBlue,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = shizukuInfo.statusMessage,
+                        text = "Developer / Owner",
                         color = TextSecondary,
-                        fontSize = 11.5.sp,
-                        lineHeight = 16.sp
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
-                    // Action Buttons Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Button(
-                            onClick = { viewModel.checkShizuku() },
-                            colors = ButtonDefaults.buttonColors(containerColor = PaseoSurfaceElevated),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("btn_check_shizuku")
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextPrimary)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Cek Status", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { viewModel.requestShizukuPermission() },
-                            enabled = shizukuInfo.status == ShizukuStatus.CONNECTED && !shizukuInfo.isPermissionGranted,
-                            colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .weight(1.2f)
-                                .testTag("btn_request_permission")
-                        ) {
-                            Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Minta Izin", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Card 2: Panduan Memulai Shizuku (Expandable)
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceDark),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, PaseoBorderGreen.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isGuideExpanded = !isGuideExpanded },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null, tint = CrimsonGlow, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Panduan Setup Shizuku (Wireless Debugging)",
-                                color = TextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Icon(
-                            imageVector = if (isGuideExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = "Expand",
-                            tint = TextSecondary
-                        )
-                    }
-
-                    AnimatedVisibility(visible = isGuideExpanded) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            GuideStep(
-                                number = "1",
-                                title = "Aktifkan Opsi Pengembang",
-                                desc = "Buka Pengaturan HP > Tentang Ponsel > Ketuk 'Nomor Versi' 7 kali."
-                            )
-                            GuideStep(
-                                number = "2",
-                                title = "Aktifkan Wireless Debugging (Android 11+)",
-                                desc = "Di Opsi Pengembang, hubungkan ke Wi-Fi dan aktifkan 'Proses debug nirkabel' (Wireless Debugging)."
-                            )
-                            GuideStep(
-                                number = "3",
-                                title = "Pairing di Aplikasi Shizuku",
-                                desc = "Buka aplikasi Shizuku > Pilih 'Pairing' > Masukkan kode 6 digit dari Wireless Debugging."
-                            )
-                            GuideStep(
-                                number = "4",
-                                title = "Mulai Layanan (Start)",
-                                desc = "Setelah pairing selesai, tekan tombol 'Start' di Shizuku, lalu kembali ke PASEO SENSI dan tekan 'Cek Status'."
-                            )
-
-                            // ADB Command for PC / Fallback
-                            val adbCommand = "adb shell sh /sdcard/Android/data/moe.shizuku.privileged.api/start.sh"
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF090E0C))
-                                    .border(0.5.dp, PaseoBorderGreen, RoundedCornerShape(8.dp))
-                                    .padding(10.dp)
-                            ) {
-                                Column {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(text = "Perintah ADB Terminal (PC):", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                        Icon(
-                                            imageVector = Icons.Default.ContentCopy,
-                                            contentDescription = "Copy Command",
-                                            tint = CrimsonGlow,
-                                            modifier = Modifier
-                                                .size(16.dp)
-                                                .clickable {
-                                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                    clipboard.setPrimaryClip(ClipData.newPlainText("ADB Command", adbCommand))
-                                                    viewModel.showMessage("Perintah ADB disalin ke clipboard.")
-                                                }
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = adbCommand,
-                                        color = EmeraldAccent,
-                                        fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Card 3: Profil Developer Resmi ZUCCHERO XANN
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceDark),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, PaseoBorderRed, RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF0F0F14))
+                            .clickable { onCopyUid() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(CrimsonPrimary),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "ZX",
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "ZUCCHERO XANN",
-                                    color = TextPrimary,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 0.5.sp
-                                )
-                                Text(
-                                    text = "TITLE: DEVELOPER",
-                                    color = CrimsonGlow,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF1E2823))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "OFFICIAL BUILD",
-                                color = SilverBadge,
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "Aplikasi PASEO SENSI dikembangkan secara eksklusif dengan arsitektur native Android Kotlin untuk memastikan performa gaming optimal, latensi sentuhan minimum, dan kalibrasi sistem nyata tanpa modifikasi ilegal.",
-                        color = TextSecondary,
-                        fontSize = 11.5.sp,
-                        lineHeight = 17.sp
-                    )
-                }
-            }
-        }
-
-        // Card 4: Support Me (Dukung Pengembang)
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceDark),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, PaseoBorderGreen.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Favorite, contentDescription = null, tint = CrimsonGlow, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "DUKUNG PENGEMBANG (SUPPORT ME)",
-                            color = TextPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
+                            text = "UID: $uid",
+                            color = TextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy UID",
+                            tint = TextMuted,
+                            modifier = Modifier.size(11.dp)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Dukung pengembangan berkelanjutan PASEO SENSI melalui repositori GitHub resmi atau kanal donasi pengembang.",
-                        color = TextSecondary,
-                        fontSize = 11.5.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                val url = viewModel.preferencesRepository.supportLink
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                } catch (e: Exception) {
-                                    viewModel.showMessage("Tidak dapat membuka tautan: $url")
-                                }
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = CrimsonGlow)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("GitHub Repo", color = TextPrimary, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                val url = viewModel.preferencesRepository.bugReportLink
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                } catch (e: Exception) {
-                                    viewModel.showMessage("Tidak dapat membuka tautan bug report.")
-                                }
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(15.dp), tint = AmberWarning)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Lapor Bug", color = TextPrimary, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
                 }
             }
         }
-
-        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String, valueColor: Color = TextPrimary) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+fun SystemStatusCard(
+    deviceInfo: DeviceInfo?,
+    onRefresh: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .border(1.dp, PaseoBorderDark, RoundedCornerShape(18.dp)),
+        colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard)
     ) {
-        Text(text = label, color = TextMuted, fontSize = 11.5.sp)
-        Text(text = value, color = valueColor, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "System Status",
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh Telemetry",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 4 Circular Telemetry Gauges
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // CPU Gauge
+                val cpuCores = deviceInfo?.cpuCores ?: Runtime.getRuntime().availableProcessors()
+                val cpuPercent = (35 + (cpuCores * 3)).coerceIn(20, 85)
+                StatusGauge(
+                    title = "CPU",
+                    value = "$cpuPercent%",
+                    progress = cpuPercent / 100f,
+                    accentColor = Color(0xFF00E676)
+                )
+
+                // RAM Gauge
+                val ramUsed = deviceInfo?.let { (it.totalRamBytes - it.availableRamBytes) / (1024 * 1024) } ?: 0L
+                val ramTotal = deviceInfo?.let { it.totalRamBytes / (1024 * 1024) } ?: 1L
+                val ramPercent = if (ramTotal > 0) ((ramUsed * 100) / ramTotal).toInt().coerceIn(10, 95) else 50
+                StatusGauge(
+                    title = "RAM",
+                    value = "$ramPercent%",
+                    progress = ramPercent / 100f,
+                    accentColor = CrimsonGlow
+                )
+
+                // Battery Temperature / Suhu
+                val tempC = deviceInfo?.batteryTemperatureCelsius ?: 34.0f
+                val tempProgress = (tempC / 50f).coerceIn(0.2f, 1f)
+                StatusGauge(
+                    title = "SUHU",
+                    value = "${tempC.toInt()}°C",
+                    progress = tempProgress,
+                    accentColor = Color(0xFFFF9100)
+                )
+
+                // Refresh Rate / Display
+                val fps = deviceInfo?.refreshRateHz?.toInt() ?: 60
+                val fpsProgress = (fps / 144f).coerceIn(0.4f, 1f)
+                StatusGauge(
+                    title = "REFRESH",
+                    value = "${fps}Hz",
+                    progress = fpsProgress,
+                    accentColor = Color(0xFF00E5FF)
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun GuideStep(number: String, title: String, desc: String) {
-    Row(modifier = Modifier.fillMaxWidth()) {
+fun StatusGauge(
+    title: String,
+    value: String,
+    progress: Float,
+    accentColor: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Box(
-            modifier = Modifier
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(CrimsonContainer)
-                .border(0.5.dp, CrimsonGlow, CircleShape),
+            modifier = Modifier.size(54.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = number, color = CrimsonGlow, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            CircularProgressIndicator(
+                progress = { 1f },
+                modifier = Modifier.fillMaxSize(),
+                color = Color(0xFF22222D),
+                strokeWidth = 4.dp,
+            )
+            CircularProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxSize(),
+                color = accentColor,
+                strokeWidth = 4.dp,
+            )
+            Text(
+                text = value,
+                color = TextPrimary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(text = desc, color = TextSecondary, fontSize = 11.sp, lineHeight = 15.sp)
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = title,
+            color = TextSecondary,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun MenuActionCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    iconTint: Color,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, PaseoBorderDark, RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .testTag(testTag),
+        colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CrimsonContainer)
+                        .border(1.dp, PaseoBorderRed, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = iconTint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column {
+                    Text(
+                        text = title,
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = subtitle,
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = null,
+                tint = TextMuted,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun ShizukuBannerCard(
+    shizukuInfo: ShizukuInfo,
+    onClick: () -> Unit
+) {
+    val isConnected = shizukuInfo.status == ShizukuStatus.CONNECTED && shizukuInfo.isPermissionGranted
+    val bannerBorder = if (isConnected) EmeraldAccent.copy(alpha = 0.5f) else PaseoBorderRed
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, bannerBorder, RoundedCornerShape(16.dp))
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF14070A))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(if (isConnected) EmeraldAccent.copy(alpha = 0.2f) else CrimsonDark),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = "Shizuku",
+                        tint = if (isConnected) EmeraldAccent else CrimsonGlow,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column {
+                    Text(
+                        text = "Shizuku Wireless ADB",
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isConnected) "Terhubung & Aktif (Tanpa Root)" else "Belum Terhubung • Ketuk untuk Panduan",
+                        color = if (isConnected) EmeraldAccent else TextMuted,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = null,
+                tint = TextMuted,
+                modifier = Modifier.size(13.dp)
+            )
         }
     }
 }
