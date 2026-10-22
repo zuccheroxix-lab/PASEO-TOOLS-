@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -189,6 +190,20 @@ fun ConfigCategoryView(
                     Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Simpan Konfigurasi Profil", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { viewModel.openSensitivityStudio() },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = EmeraldAccent),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldAccent),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp), tint = EmeraldAccent)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Buka Sensitivity Studio X/Y (C++ Engine)", color = EmeraldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

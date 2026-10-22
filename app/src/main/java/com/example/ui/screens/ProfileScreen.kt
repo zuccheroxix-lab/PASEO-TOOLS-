@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Videocam
@@ -286,8 +287,73 @@ fun ProfileScreen(
                 )
             }
 
+            // Security & App Lock Section
             item {
-                Spacer(modifier = Modifier.height(80.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "KEAMANAN & PENGUNCIAN INTERNAL",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, PaseoBorderDark, RoundedCornerShape(14.dp)),
+                    colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = CrimsonGlow,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Keamanan Aplikasi PASEO SENSI",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Text(
+                            text = "PIN dan Pola dienkripsi dengan salted PBKDF2 hash lokal. Sistem ini murni keamanan aplikasi dan tidak mengubah lockscreen Android Anda.",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            androidx.compose.material3.Button(
+                                onClick = { viewModel.lockApp() },
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Kunci Aplikasi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            androidx.compose.material3.Button(
+                                onClick = { viewModel.logout() },
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = PaseoSurfaceDark),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Ganti Akun", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(40.dp))
             }
         }
     }

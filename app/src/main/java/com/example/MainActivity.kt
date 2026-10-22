@@ -109,6 +109,16 @@ fun PaseoSensiApp(viewModel: MainViewModel) {
         }
     }
 
+    val isAppLocked by viewModel.isAppLocked.collectAsStateWithLifecycle()
+
+    if (isAppLocked) {
+        com.example.auth.AuthScreen(
+            authRepository = viewModel.authRepository,
+            onAuthSuccess = { viewModel.unlockApp() }
+        )
+        return
+    }
+
     if (currentSubScreen != SubScreen.NONE) {
         when (currentSubScreen) {
             SubScreen.GAME_DETAIL -> {
@@ -125,6 +135,12 @@ fun PaseoSensiApp(viewModel: MainViewModel) {
             }
             SubScreen.CROSSHAIR_GALLERY, SubScreen.CROSSHAIR_EDITOR -> {
                 CrosshairStudioScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.closeSubScreen() }
+                )
+            }
+            SubScreen.SENSITIVITY_STUDIO -> {
+                com.example.ui.screens.SensitivityStudioScreen(
                     viewModel = viewModel,
                     onBack = { viewModel.closeSubScreen() }
                 )

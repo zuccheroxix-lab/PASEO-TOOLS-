@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -22,6 +23,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -29,8 +32,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,10 +47,13 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,6 +107,11 @@ fun CrosshairStudioScreen(
     var selectedColor by remember(currentConfig) { mutableLongStateOf(currentConfig.colorValue) }
     var opacity by remember(currentConfig) { mutableFloatStateOf(currentConfig.opacity) }
     var thicknessDp by remember(currentConfig) { mutableFloatStateOf(currentConfig.thicknessDp) }
+
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importJsonText by remember { mutableStateOf("") }
+    var showSavePresetDialog by remember { mutableStateOf(false) }
+    var presetNameInput by remember { mutableStateOf("") }
 
     Surface(
         color = PaseoDarkBackground,
@@ -526,11 +542,173 @@ fun CrosshairStudioScreen(
                         }
                     }
 
+                    // Export, Import, and Preset Save Buttons
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val current = currentConfig.copy(
+                                        shape = shape,
+                                        sizeDp = sizeDp.toInt(),
+                                        offsetX = offsetX.toInt(),
+                                        offsetY = offsetY.toInt(),
+                                        colorValue = selectedColor,
+                                        opacity = opacity,
+                                        thicknessDp = thicknessDp
+                                    )
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("CrosshairJSON", current.toJson()))
+                                    viewModel.showMessage("Format JSON berhasil disalin ke clipboard!")
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E1F29))
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Ekspor", fontSize = 11.sp)
+                            }
+
+                            Button(
+                                onClick = { showImportDialog = true },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E1F29))
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Impor", fontSize = 11.sp)
+                            }
+
+                            Button(
+                                onClick = { showSavePresetDialog = true },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E1F29))
+                            ) {
+                                Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Preset", fontSize = 11.sp)
+                            }
+                        }
+                    }
+
                     item {
                         Spacer(modifier = Modifier.height(30.dp))
                     }
                 }
             }
+        }
+
+        // Import Dialog
+        if (showImportDialog) {
+            AlertDialog(
+                onDismissRequest = { showImportDialog = false },
+                title = { Text("Impor Crosshair dari JSON", color = Color.White) },
+                text = {
+                    OutlinedTextField(
+                        value = importJsonText,
+                        onValueChange = { importJsonText = it },
+                        label = { Text("Tempel JSON di sini") },
+                        maxLines = 6,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CrimsonPrimary,
+                            unfocusedBorderColor = PaseoBorderDark,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val parsed = com.example.model.CrosshairConfig.fromJson(importJsonText)
+                            if (parsed != null) {
+                                shape = parsed.shape
+                                sizeDp = parsed.sizeDp.toFloat()
+                                offsetX = parsed.offsetX.toFloat()
+                                offsetY = parsed.offsetY.toFloat()
+                                selectedColor = parsed.colorValue
+                                opacity = parsed.opacity
+                                thicknessDp = parsed.thicknessDp
+                                viewModel.updateCrosshairConfig(parsed)
+                                viewModel.showMessage("Crosshair berhasil diimpor!")
+                                showImportDialog = false
+                                importJsonText = ""
+                            } else {
+                                viewModel.showMessage("Format JSON tidak valid!")
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
+                    ) {
+                        Text("Impor")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showImportDialog = false }) {
+                        Text("Batal", color = TextMuted)
+                    }
+                },
+                containerColor = PaseoSurfaceCard
+            )
+        }
+
+        // Save Custom Preset Dialog
+        if (showSavePresetDialog) {
+            AlertDialog(
+                onDismissRequest = { showSavePresetDialog = false },
+                title = { Text("Simpan Sebagai Preset Kustom", color = Color.White) },
+                text = {
+                    OutlinedTextField(
+                        value = presetNameInput,
+                        onValueChange = { presetNameInput = it },
+                        label = { Text("Nama Preset (misal: Crimson Sniper Dot)") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CrimsonPrimary,
+                            unfocusedBorderColor = PaseoBorderDark,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (presetNameInput.isNotBlank()) {
+                                val current = currentConfig.copy(
+                                    shape = shape,
+                                    sizeDp = sizeDp.toInt(),
+                                    offsetX = offsetX.toInt(),
+                                    offsetY = offsetY.toInt(),
+                                    colorValue = selectedColor,
+                                    opacity = opacity,
+                                    thicknessDp = thicknessDp
+                                )
+                                val newPreset = com.example.model.CrosshairPreset(
+                                    id = "ch_cust_" + java.util.UUID.randomUUID().toString().take(8),
+                                    name = presetNameInput.trim(),
+                                    config = current,
+                                    isCustom = true
+                                )
+                                viewModel.preferencesRepository.saveCustomCrosshairPreset(newPreset)
+                                viewModel.showMessage("Preset '${newPreset.name}' berhasil disimpan!")
+                                showSavePresetDialog = false
+                                presetNameInput = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
+                    ) {
+                        Text("Simpan")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSavePresetDialog = false }) {
+                        Text("Batal", color = TextMuted)
+                    }
+                },
+                containerColor = PaseoSurfaceCard
+            )
         }
     }
 }

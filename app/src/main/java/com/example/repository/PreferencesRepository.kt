@@ -98,15 +98,95 @@ class PreferencesRepository(context: Context) {
         _crosshairConfig.value = config
     }
 
+    fun getAllCrosshairPresets(): List<com.example.model.CrosshairPreset> {
+        val customs = loadCustomCrosshairPresets()
+        return com.example.model.CrosshairPreset.DEFAULT_PRESETS + customs
+    }
+
+    private fun loadCustomCrosshairPresets(): List<com.example.model.CrosshairPreset> {
+        val raw = prefs.getString("custom_crosshair_presets_json", null) ?: return emptyList()
+        return try {
+            val array = org.json.JSONArray(raw)
+            val list = mutableListOf<com.example.model.CrosshairPreset>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val config = com.example.model.CrosshairConfig.fromJson(obj.getJSONObject("config").toString())
+                if (config != null) {
+                    list.add(
+                        com.example.model.CrosshairPreset(
+                            id = obj.getString("id"),
+                            name = obj.getString("name"),
+                            config = config,
+                            isCustom = true
+                        )
+                    )
+                }
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveCustomCrosshairPreset(preset: com.example.model.CrosshairPreset) {
+        val customs = loadCustomCrosshairPresets().toMutableList()
+        val index = customs.indexOfFirst { it.id == preset.id }
+        if (index >= 0) {
+            customs[index] = preset
+        } else {
+            customs.add(preset)
+        }
+        val array = org.json.JSONArray()
+        for (p in customs) {
+            val obj = org.json.JSONObject().apply {
+                put("id", p.id)
+                put("name", p.name)
+                put("config", org.json.JSONObject(p.config.toJson()))
+                put("isCustom", true)
+            }
+            array.put(obj)
+        }
+        prefs.edit().putString("custom_crosshair_presets_json", array.toString()).apply()
+    }
+
+    fun deleteCrosshairPreset(id: String): Boolean {
+        if (com.example.model.CrosshairPreset.DEFAULT_PRESETS.any { it.id == id }) return false
+        val customs = loadCustomCrosshairPresets().toMutableList()
+        val removed = customs.removeAll { it.id == id }
+        if (removed) {
+            val array = org.json.JSONArray()
+            for (p in customs) {
+                val obj = org.json.JSONObject().apply {
+                    put("id", p.id)
+                    put("name", p.name)
+                    put("config", org.json.JSONObject(p.config.toJson()))
+                    put("isCustom", true)
+                }
+                array.put(obj)
+            }
+            prefs.edit().putString("custom_crosshair_presets_json", array.toString()).apply()
+        }
+        return removed
+    }
+
     private fun loadActiveProfile(): SensitivityProfile {
         val rawJson = prefs.getString(KEY_ACTIVE_PROFILE_JSON, null)
         if (rawJson != null) {
             try {
                 val json = JSONObject(rawJson)
+                val curveName = json.optString("curveType", com.example.model.SensitivityCurveType.DYNAMIC.name)
+                val curve = try {
+                    com.example.model.SensitivityCurveType.valueOf(curveName)
+                } catch (e: Exception) {
+                    com.example.model.SensitivityCurveType.DYNAMIC
+                }
                 return SensitivityProfile(
                     id = json.getString("id"),
                     name = json.getString("name"),
                     description = json.optString("desc", ""),
+                    gamePackage = if (json.has("gamePackage")) json.optString("gamePackage", null) else null,
+                    sensiX = json.optDouble("sensiX", 1.0).toFloat(),
+                    sensiY = json.optDouble("sensiY", 1.0).toFloat(),
                     generalSensi = json.getInt("general"),
                     redDotSensi = json.getInt("redDot"),
                     scope2xSensi = json.getInt("scope2x"),
@@ -116,6 +196,10 @@ class PreferencesRepository(context: Context) {
                     recommendedDpi = json.getInt("dpi"),
                     pointerSpeed = json.getInt("pointerSpeed"),
                     aimTrickTuningPercent = json.optInt("aimTrick", 15),
+                    curveType = curve,
+                    deadzone = json.optDouble("deadzone", 0.02).toFloat(),
+                    smoothing = json.optDouble("smoothing", 0.10).toFloat(),
+                    acceleration = json.optDouble("acceleration", 1.05).toFloat(),
                     isCustom = json.optBoolean("isCustom", true)
                 )
             } catch (e: Exception) {
@@ -131,6 +215,9 @@ class PreferencesRepository(context: Context) {
                 put("id", profile.id)
                 put("name", profile.name)
                 put("desc", profile.description)
+                put("gamePackage", profile.gamePackage)
+                put("sensiX", profile.sensiX.toDouble())
+                put("sensiY", profile.sensiY.toDouble())
                 put("general", profile.generalSensi)
                 put("redDot", profile.redDotSensi)
                 put("scope2x", profile.scope2xSensi)
@@ -140,6 +227,10 @@ class PreferencesRepository(context: Context) {
                 put("dpi", profile.recommendedDpi)
                 put("pointerSpeed", profile.pointerSpeed)
                 put("aimTrick", profile.aimTrickTuningPercent)
+                put("curveType", profile.curveType.name)
+                put("deadzone", profile.deadzone.toDouble())
+                put("smoothing", profile.smoothing.toDouble())
+                put("acceleration", profile.acceleration.toDouble())
                 put("isCustom", profile.isCustom)
             }
             prefs.edit().putString(KEY_ACTIVE_PROFILE_JSON, json.toString()).apply()

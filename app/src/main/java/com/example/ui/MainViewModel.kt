@@ -45,7 +45,8 @@ enum class SubScreen {
     CROSSHAIR_GALLERY,
     CROSSHAIR_EDITOR,
     SHIZUKU_PAGE,
-    SETTINGS_PAGE
+    SETTINGS_PAGE,
+    SENSITIVITY_STUDIO
 }
 
 enum class GameLabsCategory {
@@ -60,8 +61,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val shizukuManager = ShizukuManager(context)
     val preferencesRepository = PreferencesRepository(context)
+    val authRepository = com.example.auth.AuthRepository(context)
+    val sensitivityRepository = com.example.repository.SensitivityRepository(context)
     val appLauncherRepository = AppLauncherRepository(context)
     val systemMonitorRepository = SystemMonitorRepository(context)
+
+    // Security & App Lock State
+    private val _isAppLocked = MutableStateFlow(authRepository.hasAnyAccount() && authRepository.isAppLocked())
+    val isAppLocked: StateFlow<Boolean> = _isAppLocked.asStateFlow()
+
+    fun unlockApp() {
+        authRepository.setAppLocked(false)
+        _isAppLocked.value = false
+    }
+
+    fun lockApp() {
+        authRepository.setAppLocked(true)
+        _isAppLocked.value = true
+    }
+
+    fun logout() {
+        lockApp()
+        _currentSubScreen.value = SubScreen.NONE
+        _currentTab.value = MainTab.BERANDA
+    }
 
     // Navigation & Screen State
     private val _currentTab = MutableStateFlow(MainTab.BERANDA)
@@ -144,7 +167,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val crosshairConfig: StateFlow<CrosshairConfig> = preferencesRepository.crosshairConfig
 
     // Sensitivity State
-    val activeProfile: StateFlow<SensitivityProfile> = preferencesRepository.activeProfile
+    val activeProfile: StateFlow<SensitivityProfile> = sensitivityRepository.activeProfile
 
     // UI Feedback Message
     private val _uiMessage = MutableStateFlow<String?>(null)
@@ -460,12 +483,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Sensitivity Settings
     fun selectSensitivityProfile(profile: SensitivityProfile) {
+        sensitivityRepository.setActiveProfile(profile)
         preferencesRepository.saveActiveProfile(profile)
         showMessage("Profil sensitivitas '${profile.name}' dipilih.")
     }
 
-    fun updateActiveProfile(profile: SensitivityProfile) {
+    fun saveActiveProfile(profile: SensitivityProfile) {
+        sensitivityRepository.setActiveProfile(profile)
         preferencesRepository.saveActiveProfile(profile)
+    }
+
+    fun openSensitivityStudio() {
+        navigateToSubScreen(SubScreen.SENSITIVITY_STUDIO)
+    }
+
+    fun updateActiveProfile(profile: SensitivityProfile) {
+        saveActiveProfile(profile)
     }
 
     override fun onCleared() {

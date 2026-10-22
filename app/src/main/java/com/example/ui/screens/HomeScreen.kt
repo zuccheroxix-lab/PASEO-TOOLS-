@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -139,6 +140,17 @@ fun HomeScreen(
                 iconTint = Color(0xFFFF9100),
                 onClick = { viewModel.selectTab(MainTab.TOOLS) },
                 testTag = "menu_tools"
+            )
+        }
+
+        item {
+            MenuActionCard(
+                title = "Sensitivity Studio X/Y",
+                subtitle = "C++ Core Engine & Aim Simulator",
+                icon = Icons.Default.Tune,
+                iconTint = EmeraldAccent,
+                onClick = { viewModel.navigateToSubScreen(SubScreen.SENSITIVITY_STUDIO) },
+                testTag = "menu_sensitivity_studio"
             )
         }
 
