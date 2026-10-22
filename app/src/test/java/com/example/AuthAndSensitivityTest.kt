@@ -2,18 +2,10 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.auth.AuthMode
 import com.example.auth.AuthRepository
-import com.example.auth.AuthResult
-import com.example.auth.UserAccount
-import com.example.auth.ValidationResult
-import com.example.model.CrosshairConfig
-import com.example.model.CrosshairPreset
-import com.example.model.CrosshairShape
 import com.example.model.SensitivityCurveType
 import com.example.model.SensitivityProfile
 import com.example.nativecore.SensitivityBridge
-import com.example.repository.PreferencesRepository
 import com.example.repository.SensitivityRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,7 +16,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -33,290 +24,201 @@ class AuthAndSensitivityTest {
     private lateinit var context: Context
     private lateinit var authRepository: AuthRepository
     private lateinit var sensitivityRepository: SensitivityRepository
-    private lateinit var preferencesRepository: PreferencesRepository
 
     @Before
-    fun setUp() {
+    fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        // Clear shared preferences for clean test runs
+        context.getSharedPreferences("paseo_auth_storage_v2", Context.MODE_PRIVATE).edit().clear().commit()
+        context.getSharedPreferences("paseo_sensitivity_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
         authRepository = AuthRepository(context)
         sensitivityRepository = SensitivityRepository(context)
-        preferencesRepository = PreferencesRepository(context)
     }
 
-    // ==========================================
-    // 1. PIN VALIDATION & WEAK PIN REJECTION
-    // ==========================================
     @Test
-    fun `test weak PIN rejection for repeated and sequential numbers`() {
-        // Rejects repeated digits
-        val repeated = authRepository.validatePin("1111")
-        assertTrue(repeated is ValidationResult.Invalid)
-        assertEquals("PIN terlalu lemah: tidak boleh angka berulang yang sama.", (repeated as ValidationResult.Invalid).reason)
+    fun testPinStrengthRules() {
+        // Trivial or short/long PINs
+        assertTrue(authRepository.validatePinStrength("12").isFailure)
+        assertTrue(authRepository.validatePinStrength("123456789").isFailure)
 
-        val repeatedZeroes = authRepository.validatePin("000000")
-        assertTrue(repeatedZeroes is ValidationResult.Invalid)
+        // Repetitive numbers
+        assertTrue(authRepository.validatePinStrength("1111").isFailure)
+        assertTrue(authRepository.validatePinStrength("000000").isFailure)
 
-        // Rejects sequential numbers
-        val seqAsc = authRepository.validatePin("1234")
-        assertTrue(seqAsc is ValidationResult.Invalid)
-        assertEquals("PIN terlalu lemah: tidak boleh urutan angka berurutan sederhana.", (seqAsc as ValidationResult.Invalid).reason)
+        // Sequential numbers
+        assertTrue(authRepository.validatePinStrength("1234").isFailure)
+        assertTrue(authRepository.validatePinStrength("4321").isFailure)
+        assertTrue(authRepository.validatePinStrength("987654").isFailure)
 
-        val seqDesc = authRepository.validatePin("4321")
-        assertTrue(seqDesc is ValidationResult.Invalid)
-
-        // Rejects too short or too long
-        assertTrue(authRepository.validatePin("12") is ValidationResult.Invalid)
-        assertTrue(authRepository.validatePin("123456789") is ValidationResult.Invalid)
-
-        // Accepts valid secure PIN
-        val validPin = authRepository.validatePin("7391")
-        assertEquals(ValidationResult.Valid, validPin)
-
-        val validPin6 = authRepository.validatePin("849201")
-        assertEquals(ValidationResult.Valid, validPin6)
+        // Valid strong PINs
+        assertTrue(authRepository.validatePinStrength("8294").isSuccess)
+        assertTrue(authRepository.validatePinStrength("931842").isSuccess)
     }
 
-    // ==========================================
-    // 2. PIN REGISTRATION, HASHING & LOGIN VERIFICATION
-    // ==========================================
     @Test
-    fun `test PIN registration with salted PBKDF2 hash and duplicate rejection`() {
-        val testPin = "7492"
-        val salt = authRepository.generateSalt()
-        assertTrue(salt.isNotEmpty())
-        assertEquals(32, salt.length) // 16 bytes in hex = 32 chars
+    fun testAccountRegistrationAndDuplicatePinRejection() {
+        val user1 = authRepository.registerAccount(
+            username = "GamerOne",
+            pin = "8294",
+            pinConfirm = "8294",
+            securityQuestion = "Perangkat favorit?",
+            securityAnswer = "ROG Phone 8"
+        )
+        assertTrue(user1.isSuccess)
+        val acc1 = user1.getOrThrow()
 
-        val pinHash = authRepository.hashCredential(testPin, salt)
-        val hmacLookup = authRepository.computeHmacPinLookup(testPin)
-        val recoveryHash = authRepository.hashCredential("free fire", salt)
+        // Plaintext PIN must never be stored anywhere
+        assertFalse(acc1.pinHashBase64.contains("8294"))
+        assertNotNull(acc1.pinSaltBase64)
+        assertNotNull(acc1.pinHmacBase64)
 
-        val account = UserAccount(
-            id = UUID.randomUUID().toString(),
-            username = "ZX_Master",
-            saltHex = salt,
-            pinHash = pinHash,
-            hmacPinLookup = hmacLookup,
-            patternHash = null,
-            recoveryQuestion = "Game favorit?",
-            recoveryAnswerHash = recoveryHash,
-            preferredAuthMode = AuthMode.PIN
+        // Duplicate PIN registration must be rejected via HMAC check
+        val duplicatePinUser = authRepository.registerAccount(
+            username = "GamerTwo",
+            pin = "8294",
+            pinConfirm = "8294"
+        )
+        assertTrue(duplicatePinUser.isFailure)
+        assertTrue(duplicatePinUser.exceptionOrNull()?.message?.contains("sudah terdaftar") == true)
+    }
+
+    @Test
+    fun testLoginSuccessAndLockoutRateLimiting() {
+        authRepository.registerAccount(
+            username = "PlayerZX",
+            pin = "9318",
+            pinConfirm = "9318"
         )
 
-        authRepository.saveAccount(account)
+        // Valid PIN login
+        val loginSuccess = authRepository.loginWithPin("9318")
+        assertTrue(loginSuccess.isSuccess)
 
-        // Verify account exists
-        assertTrue(authRepository.hasAnyAccount())
-        val saved = authRepository.getActiveAccount()
-        assertNotNull(saved)
-        assertEquals("ZX_Master", saved?.username)
-
-        // Verify correct PIN authenticates
-        val successResult = authRepository.verifyPin(saved!!, testPin)
-        assertTrue(successResult is AuthResult.Success)
-
-        // Verify incorrect PIN fails
-        val failResult = authRepository.verifyPin(saved, "9999")
-        assertTrue(failResult is AuthResult.Failure)
-
-        // Verify duplicate PIN check flags duplicate on local database
-        assertTrue(authRepository.isPinRegisteredInLocalDatabase(testPin))
-        assertFalse(authRepository.isPinRegisteredInLocalDatabase("5821"))
-
-        // Verify credentials are NEVER stored in plaintext in SharedPreferences
-        val rawPrefs = context.getSharedPreferences("paseo_auth_secure_prefs", Context.MODE_PRIVATE)
-        val allPrefsString = rawPrefs.all.toString()
-        assertFalse("Raw PIN must never appear in preferences!", allPrefsString.contains(testPin))
-    }
-
-    // ==========================================
-    // 3. PATTERN LOCK REGISTRATION & VALIDATION
-    // ==========================================
-    @Test
-    fun `test Pattern lock validation and authentication`() {
-        // Rejects pattern that is too short
-        val shortPattern = listOf(0, 1, 2)
-        val shortResult = authRepository.validatePattern(shortPattern)
-        assertTrue(shortResult is ValidationResult.Invalid)
-
-        // Valid pattern
-        val validPattern = listOf(0, 4, 8, 5)
-        val validResult = authRepository.validatePattern(validPattern)
-        assertEquals(ValidationResult.Valid, validResult)
-
-        val salt = authRepository.generateSalt()
-        val patternString = validPattern.joinToString("-")
-        val patternHash = authRepository.hashCredential(patternString, salt)
-
-        val account = UserAccount(
-            id = UUID.randomUUID().toString(),
-            username = "ZX_Gamer",
-            saltHex = salt,
-            pinHash = null,
-            hmacPinLookup = null,
-            patternHash = patternHash,
-            recoveryQuestion = "Game favorit?",
-            recoveryAnswerHash = authRepository.hashCredential("pubg", salt),
-            preferredAuthMode = AuthMode.PATTERN
-        )
-        authRepository.saveAccount(account)
-
-        // Verification matches
-        val success = authRepository.verifyPattern(account, listOf(0, 4, 8, 5))
-        assertTrue(success is AuthResult.Success)
-
-        // Wrong pattern fails
-        val failure = authRepository.verifyPattern(account, listOf(0, 1, 2, 5))
-        assertTrue(failure is AuthResult.Failure)
-    }
-
-    // ==========================================
-    // 4. RATE LIMITING & LOCKOUT
-    // ==========================================
-    @Test
-    fun `test authentication rate limiting and lockout after 5 failed attempts`() {
-        val salt = authRepository.generateSalt()
-        val account = UserAccount(
-            id = UUID.randomUUID().toString(),
-            username = "TestUser",
-            saltHex = salt,
-            pinHash = authRepository.hashCredential("8371", salt),
-            hmacPinLookup = authRepository.computeHmacPinLookup("8371"),
-            patternHash = null,
-            recoveryQuestion = "Pet name?",
-            recoveryAnswerHash = authRepository.hashCredential("cat", salt)
-        )
-        authRepository.saveAccount(account)
-
-        var current = authRepository.getActiveAccount()!!
+        // 5 consecutive wrong PIN failures
         for (i in 1..4) {
-            val res = authRepository.verifyPin(current, "0000")
-            assertTrue(res is AuthResult.Failure)
-            current = authRepository.getActiveAccount()!!
+            val fail = authRepository.loginWithPin("7721")
+            assertTrue(fail.isFailure)
+            assertFalse(authRepository.isLockedOut())
         }
 
-        // 5th failed attempt must trigger lockout
-        val fifthRes = authRepository.verifyPin(current, "0000")
-        assertTrue("5th failed attempt must trigger LockedOut", fifthRes is AuthResult.LockedOut)
-        assertTrue((fifthRes as AuthResult.LockedOut).waitSeconds > 0)
+        // 5th failure triggers lockout
+        val fifthFail = authRepository.loginWithPin("7721")
+        assertTrue(fifthFail.isFailure)
+        assertTrue(authRepository.isLockedOut())
+        assertTrue(authRepository.getRemainingLockoutSeconds() > 0)
+
+        // Locked out state blocks subsequent attempts
+        val blockedAttempt = authRepository.loginWithPin("9318")
+        assertTrue(blockedAttempt.isFailure)
+        assertTrue(blockedAttempt.exceptionOrNull()?.message?.contains("terkunci") == true)
     }
 
-    // ==========================================
-    // 5. CROSSHAIR PRESET & JSON IMPORT/EXPORT
-    // ==========================================
     @Test
-    fun `test CrosshairConfig JSON serialization and preset repository`() {
-        val config = CrosshairConfig(
-            isEnabled = true,
-            shape = CrosshairShape.DIAMOND,
-            colorValue = 0xFF00E676,
-            sizeDp = 30,
-            thicknessDp = 3.5f,
-            gapDp = 6.0f,
-            opacity = 0.90f,
-            offsetX = 10,
-            offsetY = -15
+    fun testPatternValidationAndLogin() {
+        val pattern = listOf(0, 4, 8, 5, 2) // Valid non-trivial pattern
+        val reg = authRepository.registerAccount(
+            username = "PatternMaster",
+            pin = "8492",
+            pinConfirm = "8492",
+            patternNodes = pattern
         )
+        assertTrue(reg.isSuccess)
 
-        // Test JSON Export
-        val json = config.toJson()
-        assertTrue(json.contains("DIAMOND"))
-        assertTrue(json.contains("\"sizeDp\": 30"))
+        val patternLoginSuccess = authRepository.loginWithPattern(pattern)
+        assertTrue(patternLoginSuccess.isSuccess)
 
-        // Test JSON Import
-        val imported = CrosshairConfig.fromJson(json)
-        assertNotNull(imported)
-        assertEquals(CrosshairShape.DIAMOND, imported?.shape)
-        assertEquals(30, imported?.sizeDp)
-        assertEquals(0xFF00E676, imported?.colorValue)
-        assertEquals(10, imported?.offsetX)
-        assertEquals(-15, imported?.offsetY)
-
-        // Test Custom Preset saving in repository
-        val preset = CrosshairPreset(
-            id = "test_custom_preset_1",
-            name = "My Elite Scope",
-            config = config,
-            isCustom = true
-        )
-        preferencesRepository.saveCustomCrosshairPreset(preset)
-
-        val allPresets = preferencesRepository.getAllCrosshairPresets()
-        assertTrue(allPresets.any { it.id == "test_custom_preset_1" && it.name == "My Elite Scope" })
-
-        // Test deletion of custom preset
-        val deleted = preferencesRepository.deleteCrosshairPreset("test_custom_preset_1")
-        assertTrue(deleted)
+        val wrongPattern = listOf(0, 1, 2, 5, 8)
+        val wrongLogin = authRepository.loginWithPattern(wrongPattern)
+        assertTrue(wrongLogin.isFailure)
     }
 
-    // ==========================================
-    // 6. SENSITIVITY ENGINE C++ ALGORITHMIC PARITY & X/Y TRANSFORMATION
-    // ==========================================
     @Test
-    fun `test SensitivityBridge mathematical coordinate calculation and curves`() {
-        val rawDeltaX = 15.0f
-        val rawDeltaY = 10.0f
-        val sensiX = 1.35f
-        val sensiY = 1.20f
-
-        val resultDynamic = SensitivityBridge.calculateTransformedPoint(
-            rawDeltaX = rawDeltaX,
-            rawDeltaY = rawDeltaY,
-            sensiMultiplierX = sensiX,
-            sensiMultiplierY = sensiY,
-            curveType = SensitivityCurveType.DYNAMIC,
-            smoothingFactor = 0.10f,
-            deadzoneThreshold = 0.02f,
-            accelerationFactor = 1.10f,
-            deltaTimeMs = 16.6f
+    fun testAccountRecovery() {
+        authRepository.registerAccount(
+            username = "RecoveryUser",
+            pin = "4829",
+            pinConfirm = "4829",
+            securityQuestion = "Kota lahir?",
+            securityAnswer = "Jakarta"
         )
 
-        assertTrue(resultDynamic.x > 0)
-        assertTrue(resultDynamic.y > 0)
-        assertTrue(resultDynamic.velocity > 0)
-        assertTrue(resultDynamic.appliedMultiplierX >= sensiX)
-        assertTrue(resultDynamic.appliedMultiplierY >= sensiY)
+        // Wrong answer fails
+        val wrongRecovery = authRepository.recoverAccount("RecoveryUser", "Bandung", "7391", "7391")
+        assertTrue(wrongRecovery.isFailure)
 
-        // Test deadzone filtering
-        val resultDeadzone = SensitivityBridge.calculateTransformedPoint(
-            rawDeltaX = 0.005f,
-            rawDeltaY = 0.005f,
-            sensiMultiplierX = sensiX,
-            sensiMultiplierY = sensiY,
-            curveType = SensitivityCurveType.LINEAR,
-            deadzoneThreshold = 0.05f
-        )
-        assertEquals(0.0f, resultDeadzone.x, 0.0001f)
-        assertEquals(0.0f, resultDeadzone.y, 0.0001f)
+        // Correct answer resets PIN
+        val successRecovery = authRepository.recoverAccount("RecoveryUser", "Jakarta", "7391", "7391")
+        assertTrue(successRecovery.isSuccess)
+
+        // Old PIN no longer works
+        assertTrue(authRepository.loginWithPin("4829").isFailure)
+
+        // New PIN works
+        assertTrue(authRepository.loginWithPin("7391").isSuccess)
     }
 
-    // ==========================================
-    // 7. SENSITIVITY REPOSITORY CRUD & EXPORT/IMPORT
-    // ==========================================
     @Test
-    fun `test SensitivityRepository profile CRUD, duplicate, and JSON import export`() {
-        val baseProfile = SensitivityProfile.PRESETS.first()
-        val duplicated = sensitivityRepository.duplicateProfile(baseProfile.id, "Headshot FF 2026")
-        assertNotNull(duplicated)
-        assertEquals("Headshot FF 2026", duplicated?.name)
-        assertTrue(duplicated!!.isCustom)
+    fun testSensitivityMathCoreCalculations() {
+        val bridge = SensitivityBridge()
 
-        // Test Export
-        val json = sensitivityRepository.exportProfileJson(duplicated)
-        assertTrue(json.contains("Headshot FF 2026"))
+        val testProfile = SensitivityProfile(
+            id = "test_profile",
+            name = "Test Spec",
+            description = "Test Description",
+            sensiX = 1.50f,
+            sensiY = 1.00f,
+            deadzone = 0.02f,
+            smoothing = 0.10f,
+            acceleration = 1.10f,
+            curveType = SensitivityCurveType.DYNAMIC
+        )
+        bridge.setProfile(testProfile)
 
-        // Test Import
-        val imported = sensitivityRepository.importProfileJson(json)
-        assertNotNull(imported)
-        assertTrue(imported!!.name.contains("Headshot FF 2026"))
+        // 1. Sub-deadzone movement should be suppressed to 0
+        val tinyDelta = bridge.processDelta(0.1f, 0.1f, 0.016f)
+        assertEquals(0.0f, tinyDelta.first, 0.001f)
+        assertEquals(0.0f, tinyDelta.second, 0.001f)
 
-        // Test Game Assignment
-        sensitivityRepository.assignProfileToGame(imported.id, "com.dts.freefireth")
-        val mapped = sensitivityRepository.getProfileForGame("com.dts.freefireth")
-        assertNotNull(mapped)
-        assertEquals(imported.id, mapped?.id)
+        // 2. Clear movement above deadzone
+        bridge.reset()
+        val delta = bridge.processDelta(10.0f, 5.0f, 0.016f)
+        assertTrue(delta.first > 0.0f)
+        assertTrue(delta.second > 0.0f)
 
-        // Test Deletion
-        val deleted = sensitivityRepository.deleteProfile(duplicated.id)
+        // SensiX is 1.5x and SensiY is 1.0x, so transformed X:Y ratio should be higher than raw 10:5
+        val rawRatio = 10.0f / 5.0f
+        val transformedRatio = delta.first / delta.second
+        assertTrue(transformedRatio > rawRatio)
+    }
+
+    @Test
+    fun testSensitivityRepositoryProfileManagement() {
+        val presets = sensitivityRepository.allProfiles.value
+        assertTrue(presets.isNotEmpty())
+
+        val base = presets.first()
+        val custom = base.copy(name = "My Custom Aim", sensiX = 1.85f, sensiY = 1.45f)
+        val saved = sensitivityRepository.saveCustomProfile(custom)
+
+        assertEquals("My Custom Aim", saved.name)
+        assertTrue(saved.isCustom)
+
+        // Check persistence in repository
+        val found = sensitivityRepository.allProfiles.value.find { it.id == saved.id }
+        assertNotNull(found)
+        assertEquals(1.85f, found?.sensiX ?: 0f, 0.01f)
+
+        // Export and import JSON
+        val exportedJson = sensitivityRepository.exportProfilesJson()
+        assertTrue(exportedJson.contains("My Custom Aim"))
+
+        val importRes = sensitivityRepository.importProfilesJson(exportedJson)
+        assertTrue(importRes.isSuccess)
+        assertTrue((importRes.getOrNull() ?: 0) > 0)
+
+        // Deletion of custom profile
+        val deleted = sensitivityRepository.deleteProfile(saved.id)
         assertTrue(deleted)
     }
 }

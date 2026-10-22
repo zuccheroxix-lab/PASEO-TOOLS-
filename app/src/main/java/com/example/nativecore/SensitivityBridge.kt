@@ -1,203 +1,221 @@
 package com.example.nativecore
 
+import android.util.Log
 import com.example.model.SensitivityCurveType
-import kotlin.math.ln1p
+import com.example.model.SensitivityProfile
+import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-data class TransformedResult(
-    val x: Float,
-    val y: Float,
-    val velocity: Float,
-    val appliedMultiplierX: Float,
-    val appliedMultiplierY: Float,
-    val isNativeEngine: Boolean
-)
+/**
+ * PASEO SENSI — Native C++ JNI Bridge & Fallback Math Core
+ * Developer: ZUCCHERO XANN
+ *
+ * Bridges Kotlin UI/Services to the native C++ SensitivityEngine.
+ * Seamlessly provides 100% mathematical parity when running in unit tests (JVM/Robolectric)
+ * or when the native .so library is not dynamically linked.
+ */
+class SensitivityBridge {
 
-object SensitivityBridge {
+    companion object {
+        private const val TAG = "SensitivityBridge"
+        private var isNativeLibLoaded = false
 
-    private var isNativeLoaded: Boolean = false
+        init {
+            try {
+                System.loadLibrary("sensitivity_engine")
+                isNativeLibLoaded = true
+                Log.i(TAG, "Native C++ sensitivity_engine loaded successfully.")
+            } catch (e: Throwable) {
+                isNativeLibLoaded = false
+                Log.w(TAG, "Native library not loaded; using high-fidelity Kotlin math core: ${e.message}")
+            }
+        }
+
+        fun isNativeAvailable(): Boolean = isNativeLibLoaded
+    }
+
+    private var nativeEnginePtr: Long = 0
+    private var currentProfile: SensitivityProfile = SensitivityProfile.PRESETS.first()
+
+    // Fallback math state (parity with C++ SensitivityEngine)
+    private var prevFilteredDx: Float = 0.0f
+    private var prevFilteredDy: Float = 0.0f
+    private var hasPreviousSample: Boolean = false
 
     init {
-        try {
-            System.loadLibrary("paseosensi_native")
-            isNativeLoaded = true
-        } catch (t: Throwable) {
-            isNativeLoaded = false
-        }
-    }
-
-    fun isNativeModuleActive(): Boolean = isNativeLoaded
-
-    fun getEngineVersion(): String {
-        return if (isNativeLoaded) {
+        if (isNativeLibLoaded) {
             try {
-                nativeGetEngineVersion()
-            } catch (e: UnsatisfiedLinkError) {
-                "PASEO-SENSI-CORE-v2.0-KOTLIN-FALLBACK"
-            }
-        } else {
-            "PASEO-SENSI-CORE-v2.0-KOTLIN-ALGORITHMIC"
-        }
-    }
-
-    /**
-     * Transforms an input coordinate / swipe vector using X/Y sensitivity, curve algorithm,
-     * deadzone threshold, smoothing, and velocity acceleration.
-     */
-    fun calculateTransformedPoint(
-        rawDeltaX: Float,
-        rawDeltaY: Float,
-        sensiMultiplierX: Float,
-        sensiMultiplierY: Float,
-        curveType: SensitivityCurveType,
-        smoothingFactor: Float = 0.10f,
-        deadzoneThreshold: Float = 0.02f,
-        accelerationFactor: Float = 1.05f,
-        deltaTimeMs: Float = 16.6f
-    ): TransformedResult {
-        if (isNativeLoaded) {
-            try {
-                val out = nativeCalculateTransformedPoint(
-                    rawDeltaX,
-                    rawDeltaY,
-                    sensiMultiplierX,
-                    sensiMultiplierY,
-                    curveType.ordinal,
-                    smoothingFactor,
-                    deadzoneThreshold,
-                    accelerationFactor,
-                    deltaTimeMs
+                nativeEnginePtr = createEngineNative(
+                    currentProfile.sensiX,
+                    currentProfile.sensiY,
+                    currentProfile.deadzone,
+                    currentProfile.smoothing,
+                    currentProfile.acceleration,
+                    curveTypeToInt(currentProfile.curveType)
                 )
-                if (out.size >= 5) {
-                    return TransformedResult(
-                        x = out[0],
-                        y = out[1],
-                        velocity = out[2],
-                        appliedMultiplierX = out[3],
-                        appliedMultiplierY = out[4],
-                        isNativeEngine = true
-                    )
-                }
-            } catch (e: UnsatisfiedLinkError) {
-                // Fall back to Kotlin implementation below
+            } catch (e: Throwable) {
+                nativeEnginePtr = 0
             }
         }
-
-        // Pure Kotlin implementation with exact mathematical parity with C++ core
-        return calculateTransformedPointInternal(
-            rawDeltaX,
-            rawDeltaY,
-            sensiMultiplierX,
-            sensiMultiplierY,
-            curveType,
-            smoothingFactor,
-            deadzoneThreshold,
-            accelerationFactor,
-            deltaTimeMs
-        )
     }
 
-    fun calculateVelocity(deltaX: Float, deltaY: Float, deltaTimeMs: Float): Float {
-        if (deltaTimeMs <= 0.001f) return 0.0f
-        val distance = sqrt(deltaX * deltaX + deltaY * deltaY)
-        return distance / deltaTimeMs
+    private fun curveTypeToInt(type: SensitivityCurveType): Int {
+        return when (type) {
+            SensitivityCurveType.LINEAR -> 0
+            SensitivityCurveType.DYNAMIC -> 1
+            SensitivityCurveType.EXPONENTIAL -> 2
+            SensitivityCurveType.CONTROL_SMOOTH -> 3
+        }
     }
 
-    // --- Mathematical Parity Engine ---
-    private var prevFilteredX = 0.0f
-    private var prevFilteredY = 0.0f
+    fun setProfile(profile: SensitivityProfile) {
+        this.currentProfile = profile
+        if (isNativeLibLoaded && nativeEnginePtr != 0L) {
+            try {
+                updateConfigNative(
+                    nativeEnginePtr,
+                    profile.sensiX,
+                    profile.sensiY,
+                    profile.deadzone,
+                    profile.smoothing,
+                    profile.acceleration,
+                    curveTypeToInt(profile.curveType)
+                )
+                return
+            } catch (e: Throwable) {
+                // Fallback to Kotlin engine below
+            }
+        }
+    }
 
-    private fun calculateTransformedPointInternal(
-        rawDeltaX: Float,
-        rawDeltaY: Float,
-        sensiMultiplierX: Float,
-        sensiMultiplierY: Float,
-        curveType: SensitivityCurveType,
-        smoothingFactor: Float,
-        deadzoneThreshold: Float,
-        accelerationFactor: Float,
-        deltaTimeMs: Float
-    ): TransformedResult {
-        val rawMagnitude = sqrt(rawDeltaX * rawDeltaX + rawDeltaY * rawDeltaY)
+    fun processDelta(rawDx: Float, rawDy: Float, dtSec: Float = 0.0166f): Pair<Float, Float> {
+        if (isNativeLibLoaded && nativeEnginePtr != 0L) {
+            try {
+                val result = processDeltaNative(nativeEnginePtr, rawDx, rawDy, dtSec)
+                if (result != null && result.size >= 2) {
+                    return Pair(result[0], result[1])
+                }
+            } catch (e: Throwable) {
+                // Fall back
+            }
+        }
+        return processDeltaKotlinFallback(rawDx, rawDy, dtSec)
+    }
 
-        if (rawMagnitude < deadzoneThreshold) {
-            return TransformedResult(0.0f, 0.0f, 0.0f, sensiMultiplierX, sensiMultiplierY, false)
+    fun reset() {
+        if (isNativeLibLoaded && nativeEnginePtr != 0L) {
+            try {
+                resetNative(nativeEnginePtr)
+            } catch (_: Throwable) {}
+        }
+        prevFilteredDx = 0.0f
+        prevFilteredDy = 0.0f
+        hasPreviousSample = false
+    }
+
+    fun destroy() {
+        if (isNativeLibLoaded && nativeEnginePtr != 0L) {
+            try {
+                destroyEngineNative(nativeEnginePtr)
+            } catch (_: Throwable) {}
+            nativeEnginePtr = 0L
+        }
+    }
+
+    // Pure Kotlin mathematical parity implementation of C++ SensitivityEngine
+    private fun processDeltaKotlinFallback(rawDx: Float, rawDy: Float, dtSec: Float): Pair<Float, Float> {
+        val dt = if (dtSec <= 0.0001f) 0.0166f else dtSec
+
+        // 1. Deadzone filtering
+        val dzX = applyDeadzone(rawDx, currentProfile.deadzone * 10.0f)
+        val dzY = applyDeadzone(rawDy, currentProfile.deadzone * 10.0f)
+
+        // 2. EMA Smoothing
+        var filteredX = dzX
+        var filteredY = dzY
+        if (hasPreviousSample && currentProfile.smoothing > 0.0f) {
+            val alpha = 1.0f - currentProfile.smoothing
+            filteredX = alpha * dzX + currentProfile.smoothing * prevFilteredDx
+            filteredY = alpha * dzY + currentProfile.smoothing * prevFilteredDy
+        }
+        prevFilteredDx = filteredX
+        prevFilteredDy = filteredY
+        hasPreviousSample = true
+
+        // 3. Velocity
+        val speed = sqrt(filteredX * filteredX + filteredY * filteredY) / dt
+        val normalizedSpeed = speed / 1000.0f
+
+        // 4. Dynamic Curve
+        var curveMultiplier = 1.0f
+        if (normalizedSpeed > 0.001f) {
+            val curvedSpeed = applyCurve(normalizedSpeed, currentProfile.curveType, currentProfile.acceleration)
+            curveMultiplier = curvedSpeed / normalizedSpeed
         }
 
-        val dirX = if (rawMagnitude > 0.0001f) rawDeltaX / rawMagnitude else 0.0f
-        val dirY = if (rawMagnitude > 0.0001f) rawDeltaY / rawMagnitude else 0.0f
+        // 5. Asymmetric X/Y Multipliers
+        val outX = filteredX * currentProfile.sensiX * curveMultiplier
+        val outY = filteredY * currentProfile.sensiY * curveMultiplier
 
-        val activeMagnitude = (rawMagnitude - deadzoneThreshold) / (1.0f - deadzoneThreshold)
-        val clampedActive = activeMagnitude.coerceAtLeast(0.0f)
-
-        val curvedMagnitude = evaluateCurve(clampedActive, curveType)
-        val velocity = calculateVelocity(rawDeltaX, rawDeltaY, deltaTimeMs)
-
-        var dynamicAccel = 1.0f
-        if (accelerationFactor > 1.0f && velocity > 0.5f) {
-            val velocityRatio = ((velocity - 0.5f) / 4.0f).coerceIn(0.0f, 1.0f)
-            dynamicAccel = 1.0f + ((accelerationFactor - 1.0f) * velocityRatio)
-        }
-
-        val targetX = dirX * curvedMagnitude * sensiMultiplierX * dynamicAccel
-        val targetY = dirY * curvedMagnitude * sensiMultiplierY * dynamicAccel
-
-        val alpha = (1.0f - smoothingFactor).coerceIn(0.05f, 1.0f)
-        val filteredX = (alpha * targetX) + ((1.0f - alpha) * prevFilteredX)
-        val filteredY = (alpha * targetY) + ((1.0f - alpha) * prevFilteredY)
-
-        prevFilteredX = filteredX
-        prevFilteredY = filteredY
-
-        return TransformedResult(
-            x = filteredX,
-            y = filteredY,
-            velocity = velocity,
-            appliedMultiplierX = sensiMultiplierX * dynamicAccel,
-            appliedMultiplierY = sensiMultiplierY * dynamicAccel,
-            isNativeEngine = false
-        )
+        return Pair(outX, outY)
     }
 
-    private fun evaluateCurve(magnitude: Float, curveType: SensitivityCurveType): Float {
-        if (magnitude <= 0.0001f) return 0.0f
+    private fun applyDeadzone(value: Float, deadzoneThreshold: Float): Float {
+        val absVal = abs(value)
+        if (absVal <= deadzoneThreshold) return 0.0f
+        val sign = if (value > 0.0f) 1.0f else -1.0f
+        return sign * (absVal - deadzoneThreshold) / (1.0f - deadzoneThreshold)
+    }
+
+    private fun applyCurve(normalizedSpeed: Float, curveType: SensitivityCurveType, accelFactor: Float): Float {
+        if (normalizedSpeed <= 0.0f) return 0.0f
         return when (curveType) {
-            SensitivityCurveType.LINEAR -> magnitude
+            SensitivityCurveType.LINEAR -> normalizedSpeed
             SensitivityCurveType.DYNAMIC -> {
-                val norm = magnitude.coerceIn(0.0f, 2.5f)
-                val sCurve = (norm * norm) / (0.35f + norm * norm)
-                (norm * 0.4f) + (sCurve * 0.9f)
+                val sigmoid = 1.0f / (1.0f + exp(-3.0f * (normalizedSpeed - 1.0f)))
+                val factor = 0.8f + (1.2f * sigmoid * accelFactor)
+                normalizedSpeed * factor
             }
             SensitivityCurveType.EXPONENTIAL -> {
-                val norm = magnitude.coerceIn(0.0f, 3.0f)
-                norm.toDouble().pow(1.45).toFloat()
+                val exponent = (1.0f + ((accelFactor - 1.0f) * 0.5f)).coerceAtLeast(0.8f)
+                normalizedSpeed.toDouble().pow(exponent.toDouble()).toFloat()
             }
             SensitivityCurveType.CONTROL_SMOOTH -> {
-                val norm = magnitude.coerceIn(0.0f, 2.5f)
-                (ln1p((norm * 1.5).toDouble()) * 0.95).toFloat()
+                normalizedSpeed * (1.0f / (1.0f + 0.1f * normalizedSpeed))
             }
         }
     }
 
-    // JNI Native Declarations
-    private external fun nativeGetEngineVersion(): String
+    // Native declarations
+    private external fun createEngineNative(
+        sensiX: Float,
+        sensiY: Float,
+        deadzone: Float,
+        smoothing: Float,
+        acceleration: Float,
+        curveType: Int
+    ): Long
 
-    private external fun nativeCalculateTransformedPoint(
-        rawDeltaX: Float,
-        rawDeltaY: Float,
-        sensiMultiplierX: Float,
-        sensiMultiplierY: Float,
-        curveTypeInt: Int,
-        smoothingFactor: Float,
-        deadzoneThreshold: Float,
-        accelerationFactor: Float,
-        deltaTimeMs: Float
-    ): FloatArray
+    private external fun updateConfigNative(
+        enginePtr: Long,
+        sensiX: Float,
+        sensiY: Float,
+        deadzone: Float,
+        smoothing: Float,
+        acceleration: Float,
+        curveType: Int
+    )
 
-    private external fun nativeCalculateVelocity(
-        deltaX: Float,
-        deltaY: Float,
-        deltaTimeMs: Float
-    ): Float
+    private external fun processDeltaNative(
+        enginePtr: Long,
+        rawDx: Float,
+        rawDy: Float,
+        dtSec: Float
+    ): FloatArray?
+
+    private external fun resetNative(enginePtr: Long)
+
+    private external fun destroyEngineNative(enginePtr: Long)
 }

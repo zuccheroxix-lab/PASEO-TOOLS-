@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.example.model.SensitivityCurveType
 import com.example.model.SensitivityProfile
+import com.example.nativecore.SensitivityBridge
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,230 +12,211 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
+/**
+ * PASEO SENSI — Sensitivity Repository
+ * Developer: ZUCCHERO XANN
+ *
+ * Manages persistence, active profile selection, preset galleries, custom user tuning,
+ * and JSON configuration import/export. Connected directly to SensitivityBridge.
+ */
 class SensitivityRepository(context: Context) {
 
     private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences("paseo_sensitivity_prefs", Context.MODE_PRIVATE)
 
-    private val _activeProfile = MutableStateFlow(loadActiveProfile())
+    val bridge = SensitivityBridge()
+
+    private val _allProfiles = MutableStateFlow<List<SensitivityProfile>>(emptyList())
+    val allProfiles: StateFlow<List<SensitivityProfile>> = _allProfiles.asStateFlow()
+
+    private val _activeProfile = MutableStateFlow<SensitivityProfile>(SensitivityProfile.PRESETS.first())
     val activeProfile: StateFlow<SensitivityProfile> = _activeProfile.asStateFlow()
 
-    private val _profilesList = MutableStateFlow(loadAllProfiles())
-    val profilesList: StateFlow<List<SensitivityProfile>> = _profilesList.asStateFlow()
-
-    companion object {
-        private const val PREFS_NAME = "paseo_sensi_profiles_prefs"
-        private const val KEY_CUSTOM_PROFILES = "custom_profiles_json"
-        private const val KEY_ACTIVE_PROFILE_ID = "active_profile_id"
-        private const val KEY_GAME_MAPPINGS = "game_profile_mappings_json"
+    init {
+        loadProfiles()
     }
 
-    fun getAllProfiles(): List<SensitivityProfile> {
-        val customList = loadCustomProfiles()
-        return SensitivityProfile.PRESETS + customList
+    private fun loadProfiles() {
+        val customJson = prefs.getString("custom_profiles_json", null)
+        val customList = mutableListOf<SensitivityProfile>()
+
+        if (!customJson.isNullOrBlank()) {
+            try {
+                val array = JSONArray(customJson)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    customList.add(deserializeProfile(obj))
+                }
+            } catch (e: Exception) {
+                // If corrupted, ignore custom
+            }
+        }
+
+        val combined = SensitivityProfile.PRESETS + customList
+        _allProfiles.value = combined
+
+        val activeId = prefs.getString("active_profile_id", null)
+        val matched = combined.find { it.id == activeId } ?: SensitivityProfile.PRESETS.first()
+        _activeProfile.value = matched
+        bridge.setProfile(matched)
     }
 
-    private fun loadAllProfiles(): List<SensitivityProfile> {
-        return getAllProfiles()
+    fun setActiveProfile(profile: SensitivityProfile) {
+        _activeProfile.value = profile
+        prefs.edit().putString("active_profile_id", profile.id).apply()
+        bridge.setProfile(profile)
     }
 
-    private fun loadCustomProfiles(): List<SensitivityProfile> {
-        val raw = prefs.getString(KEY_CUSTOM_PROFILES, null) ?: return emptyList()
-        return try {
-            val array = JSONArray(raw)
-            val list = mutableListOf<SensitivityProfile>()
+    fun saveCustomProfile(profile: SensitivityProfile): SensitivityProfile {
+        val prepared = if (profile.id.isBlank() || !profile.isCustom) {
+            profile.copy(
+                id = "custom_" + UUID.randomUUID().toString().take(8),
+                isCustom = true
+            )
+        } else {
+            profile.copy(isCustom = true)
+        }
+
+        val currentList = _allProfiles.value.toMutableList()
+        val index = currentList.indexOfFirst { it.id == prepared.id }
+        if (index >= 0) {
+            currentList[index] = prepared
+        } else {
+            currentList.add(prepared)
+        }
+
+        _allProfiles.value = currentList
+        persistCustomProfiles(currentList.filter { it.isCustom })
+
+        if (_activeProfile.value.id == prepared.id) {
+            _activeProfile.value = prepared
+            bridge.setProfile(prepared)
+        }
+        return prepared
+    }
+
+    fun duplicateProfile(profile: SensitivityProfile): SensitivityProfile {
+        val dup = profile.copy(
+            id = "custom_" + UUID.randomUUID().toString().take(8),
+            name = "${profile.name} (Copy)",
+            isCustom = true
+        )
+        return saveCustomProfile(dup)
+    }
+
+    fun deleteProfile(id: String): Boolean {
+        val target = _allProfiles.value.find { it.id == id } ?: return false
+        if (!target.isCustom) return false // Cannot delete built-in presets
+
+        val updated = _allProfiles.value.filter { it.id != id }
+        _allProfiles.value = updated
+        persistCustomProfiles(updated.filter { it.isCustom })
+
+        if (_activeProfile.value.id == id) {
+            val fallback = SensitivityProfile.PRESETS.first()
+            setActiveProfile(fallback)
+        }
+        return true
+    }
+
+    fun resetToDefaults() {
+        prefs.edit().remove("custom_profiles_json").remove("active_profile_id").apply()
+        _allProfiles.value = SensitivityProfile.PRESETS
+        val defaultProfile = SensitivityProfile.PRESETS.first()
+        setActiveProfile(defaultProfile)
+    }
+
+    private fun persistCustomProfiles(customList: List<SensitivityProfile>) {
+        val array = JSONArray()
+        for (p in customList) {
+            array.put(serializeProfile(p))
+        }
+        prefs.edit().putString("custom_profiles_json", array.toString()).apply()
+    }
+
+    fun exportProfilesJson(): String {
+        val array = JSONArray()
+        for (p in _allProfiles.value) {
+            array.put(serializeProfile(p))
+        }
+        return array.toString(2)
+    }
+
+    fun importProfilesJson(json: String): Result<Int> {
+        return runCatching {
+            val array = JSONArray(json)
+            var count = 0
+            val importedList = mutableListOf<SensitivityProfile>()
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
-                list.add(parseProfileJson(obj))
+                val prof = deserializeProfile(obj).copy(
+                    id = "imported_" + UUID.randomUUID().toString().take(8),
+                    isCustom = true
+                )
+                importedList.add(prof)
+                count++
             }
-            list
-        } catch (e: Exception) {
-            emptyList()
+            if (importedList.isNotEmpty()) {
+                val combined = _allProfiles.value.toMutableList()
+                combined.addAll(importedList)
+                _allProfiles.value = combined
+                persistCustomProfiles(combined.filter { it.isCustom })
+            }
+            count
         }
     }
 
-    private fun parseProfileJson(obj: JSONObject): SensitivityProfile {
-        val curveTypeName = obj.optString("curveType", SensitivityCurveType.DYNAMIC.name)
-        val curve = try {
-            SensitivityCurveType.valueOf(curveTypeName)
-        } catch (e: Exception) {
-            SensitivityCurveType.DYNAMIC
+    private fun serializeProfile(p: SensitivityProfile): JSONObject {
+        return JSONObject().apply {
+            put("id", p.id)
+            put("name", p.name)
+            put("description", p.description)
+            put("gamePackage", p.gamePackage ?: "")
+            put("sensiX", p.sensiX.toDouble())
+            put("sensiY", p.sensiY.toDouble())
+            put("generalSensi", p.generalSensi)
+            put("redDotSensi", p.redDotSensi)
+            put("scope2xSensi", p.scope2xSensi)
+            put("scope4xSensi", p.scope4xSensi)
+            put("sniperSensi", p.sniperSensi)
+            put("freeLookSensi", p.freeLookSensi)
+            put("recommendedDpi", p.recommendedDpi)
+            put("pointerSpeed", p.pointerSpeed)
+            put("aimTrickTuningPercent", p.aimTrickTuningPercent)
+            put("curveType", p.curveType.name)
+            put("deadzone", p.deadzone.toDouble())
+            put("smoothing", p.smoothing.toDouble())
+            put("acceleration", p.acceleration.toDouble())
+            put("isCustom", p.isCustom)
         }
+    }
+
+    private fun deserializeProfile(obj: JSONObject): SensitivityProfile {
+        val curveName = obj.optString("curveType", SensitivityCurveType.DYNAMIC.name)
+        val curve = runCatching { SensitivityCurveType.valueOf(curveName) }.getOrDefault(SensitivityCurveType.DYNAMIC)
+        val gamePkg = obj.optString("gamePackage", "").ifBlank { null }
 
         return SensitivityProfile(
-            id = obj.getString("id"),
-            name = obj.getString("name"),
-            description = obj.optString("desc", ""),
-            gamePackage = if (obj.has("gamePackage")) obj.optString("gamePackage", null) else null,
+            id = obj.optString("id", UUID.randomUUID().toString()),
+            name = obj.optString("name", "Custom Profile"),
+            description = obj.optString("description", "Profil sensitivitas kustom"),
+            gamePackage = gamePkg,
             sensiX = obj.optDouble("sensiX", 1.0).toFloat(),
             sensiY = obj.optDouble("sensiY", 1.0).toFloat(),
-            generalSensi = obj.optInt("general", 90),
-            redDotSensi = obj.optInt("redDot", 85),
-            scope2xSensi = obj.optInt("scope2x", 75),
-            scope4xSensi = obj.optInt("scope4x", 68),
-            sniperSensi = obj.optInt("sniper", 50),
-            freeLookSensi = obj.optInt("freeLook", 80),
-            recommendedDpi = obj.optInt("dpi", 480),
+            generalSensi = obj.optInt("generalSensi", 90),
+            redDotSensi = obj.optInt("redDotSensi", 85),
+            scope2xSensi = obj.optInt("scope2xSensi", 75),
+            scope4xSensi = obj.optInt("scope4xSensi", 68),
+            sniperSensi = obj.optInt("sniperSensi", 50),
+            freeLookSensi = obj.optInt("freeLookSensi", 80),
+            recommendedDpi = obj.optInt("recommendedDpi", 480),
             pointerSpeed = obj.optInt("pointerSpeed", 3),
-            aimTrickTuningPercent = obj.optInt("aimTrick", 15),
+            aimTrickTuningPercent = obj.optInt("aimTrickTuningPercent", 15),
             curveType = curve,
             deadzone = obj.optDouble("deadzone", 0.02).toFloat(),
             smoothing = obj.optDouble("smoothing", 0.10).toFloat(),
             acceleration = obj.optDouble("acceleration", 1.05).toFloat(),
             isCustom = obj.optBoolean("isCustom", true)
         )
-    }
-
-    private fun profileToJson(profile: SensitivityProfile): JSONObject {
-        return JSONObject().apply {
-            put("id", profile.id)
-            put("name", profile.name)
-            put("desc", profile.description)
-            put("gamePackage", profile.gamePackage)
-            put("sensiX", profile.sensiX.toDouble())
-            put("sensiY", profile.sensiY.toDouble())
-            put("general", profile.generalSensi)
-            put("redDot", profile.redDotSensi)
-            put("scope2x", profile.scope2xSensi)
-            put("scope4x", profile.scope4xSensi)
-            put("sniper", profile.sniperSensi)
-            put("freeLook", profile.freeLookSensi)
-            put("dpi", profile.recommendedDpi)
-            put("pointerSpeed", profile.pointerSpeed)
-            put("aimTrick", profile.aimTrickTuningPercent)
-            put("curveType", profile.curveType.name)
-            put("deadzone", profile.deadzone.toDouble())
-            put("smoothing", profile.smoothing.toDouble())
-            put("acceleration", profile.acceleration.toDouble())
-            put("isCustom", profile.isCustom)
-        }
-    }
-
-    private fun loadActiveProfile(): SensitivityProfile {
-        val activeId = prefs.getString(KEY_ACTIVE_PROFILE_ID, null)
-        val all = getAllProfiles()
-        if (activeId != null) {
-            val found = all.firstOrNull { it.id == activeId }
-            if (found != null) return found
-        }
-        return SensitivityProfile.PRESETS.first()
-    }
-
-    fun setActiveProfile(profile: SensitivityProfile) {
-        prefs.edit().putString(KEY_ACTIVE_PROFILE_ID, profile.id).apply()
-        _activeProfile.value = profile
-        // If it's a custom profile or edited preset, update storage
-        if (profile.isCustom) {
-            saveCustomProfile(profile)
-        }
-    }
-
-    fun saveCustomProfile(profile: SensitivityProfile) {
-        val customs = loadCustomProfiles().toMutableList()
-        val index = customs.indexOfFirst { it.id == profile.id }
-        if (index >= 0) {
-            customs[index] = profile
-        } else {
-            customs.add(profile)
-        }
-        persistCustomProfiles(customs)
-        _profilesList.value = getAllProfiles()
-        if (_activeProfile.value.id == profile.id) {
-            _activeProfile.value = profile
-        }
-    }
-
-    fun deleteProfile(id: String): Boolean {
-        // Cannot delete built-in presets
-        if (SensitivityProfile.PRESETS.any { it.id == id }) return false
-
-        val customs = loadCustomProfiles().toMutableList()
-        val removed = customs.removeAll { it.id == id }
-        if (removed) {
-            persistCustomProfiles(customs)
-            _profilesList.value = getAllProfiles()
-            if (_activeProfile.value.id == id) {
-                setActiveProfile(SensitivityProfile.PRESETS.first())
-            }
-        }
-        return removed
-    }
-
-    fun duplicateProfile(id: String, newName: String): SensitivityProfile? {
-        val target = getAllProfiles().firstOrNull { it.id == id } ?: return null
-        val duplicated = target.copy(
-            id = "custom_" + UUID.randomUUID().toString().take(8),
-            name = newName.ifBlank { "${target.name} (Copy)" },
-            description = "Salinan kustom dari ${target.name}",
-            isCustom = true
-        )
-        saveCustomProfile(duplicated)
-        return duplicated
-    }
-
-    fun exportProfileJson(profile: SensitivityProfile): String {
-        return profileToJson(profile).toString(2)
-    }
-
-    fun importProfileJson(jsonStr: String): SensitivityProfile? {
-        return try {
-            val obj = JSONObject(jsonStr)
-            val imported = parseProfileJson(obj).copy(
-                id = "custom_imp_" + UUID.randomUUID().toString().take(8),
-                name = obj.optString("name", "Imported Profile") + " (Import)",
-                isCustom = true
-            )
-            saveCustomProfile(imported)
-            setActiveProfile(imported)
-            imported
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    fun resetActiveToDefault(): SensitivityProfile {
-        val defaultProfile = SensitivityProfile.PRESETS.first()
-        setActiveProfile(defaultProfile)
-        return defaultProfile
-    }
-
-    // --- Per-Game Sensitivity Mapping ---
-
-    fun assignProfileToGame(profileId: String, packageName: String) {
-        val mappings = loadGameMappings().toMutableMap()
-        mappings[packageName] = profileId
-        val obj = JSONObject()
-        mappings.forEach { (pkg, pId) -> obj.put(pkg, pId) }
-        prefs.edit().putString(KEY_GAME_MAPPINGS, obj.toString()).apply()
-    }
-
-    fun getProfileForGame(packageName: String): SensitivityProfile? {
-        val mappings = loadGameMappings()
-        val profileId = mappings[packageName] ?: return null
-        return getAllProfiles().firstOrNull { it.id == profileId }
-    }
-
-    private fun loadGameMappings(): Map<String, String> {
-        val raw = prefs.getString(KEY_GAME_MAPPINGS, null) ?: return emptyMap()
-        return try {
-            val obj = JSONObject(raw)
-            val map = mutableMapOf<String, String>()
-            val keys = obj.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                map[key] = obj.getString(key)
-            }
-            map
-        } catch (e: Exception) {
-            emptyMap()
-        }
-    }
-
-    private fun persistCustomProfiles(customs: List<SensitivityProfile>) {
-        val array = JSONArray()
-        for (c in customs) {
-            array.put(profileToJson(c))
-        }
-        prefs.edit().putString(KEY_CUSTOM_PROFILES, array.toString()).apply()
     }
 }

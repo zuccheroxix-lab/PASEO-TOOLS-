@@ -35,3 +35,8 @@ val TextPrimary = Color(0xFFFFFFFF)
 val TextSecondary = Color(0xFFB5BAC1)
 val TextMuted = Color(0xFF72767D)
 val SilverBadge = Color(0xFFE3E5E8)
+
+// Compatibility aliases
+val CrimsonBorder = PaseoBorderGlow
+val PaseoCardBackground = PaseoSurfaceCard
+

@@ -1,8 +1,6 @@
 package com.example.auth
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,37 +14,41 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backspace
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockReset
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,199 +59,139 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.CrimsonBorder
 import com.example.ui.theme.CrimsonContainer
 import com.example.ui.theme.CrimsonGlow
 import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.EmeraldAccent
-import com.example.ui.theme.PaseoBorderDark
-import com.example.ui.theme.PaseoBorderGlow
+import com.example.ui.theme.PaseoCardBackground
 import com.example.ui.theme.PaseoDarkBackground
-import com.example.ui.theme.PaseoSurfaceCard
-import com.example.ui.theme.PaseoSurfaceDark
-import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
-import java.util.UUID
+
+enum class AuthMode {
+    LOGIN,
+    REGISTER,
+    RECOVER
+}
+
+enum class LoginType {
+    PIN,
+    PATTERN
+}
 
 @Composable
 fun AuthScreen(
     authRepository: AuthRepository,
-    onAuthSuccess: () -> Unit
+    onAuthSuccess: (UserAccount) -> Unit
 ) {
-    val accounts = remember { authRepository.getAllAccounts() }
+    val accounts = remember { authRepository.getAccounts() }
     val hasAccounts = accounts.isNotEmpty()
 
-    var activeAccount by remember { mutableStateOf(authRepository.getActiveAccount()) }
-    var currentScreenState by remember {
-        mutableStateOf(
-            if (!hasAccounts) AuthScreenState.REGISTER_STEP1_PROFILE
-            else if (activeAccount?.preferredAuthMode == AuthMode.PATTERN && activeAccount?.patternHash != null)
-                AuthScreenState.LOGIN_PATTERN
-            else
-                AuthScreenState.LOGIN_PIN
-        )
+    var currentMode by remember {
+        mutableStateOf(if (hasAccounts) AuthMode.LOGIN else AuthMode.REGISTER)
+    }
+    var loginType by remember { mutableStateOf(LoginType.PIN) }
+
+    // Lockout countdown state
+    var remainingLockout by remember { mutableLongStateOf(authRepository.getRemainingLockoutSeconds()) }
+    LaunchedEffect(remainingLockout) {
+        if (remainingLockout > 0) {
+            delay(1000)
+            remainingLockout = authRepository.getRemainingLockoutSeconds()
+        }
     }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
-    var lockoutSeconds by remember { mutableIntStateOf(0) }
 
-    // Lockout countdown timer
-    LaunchedEffect(lockoutSeconds) {
-        if (lockoutSeconds > 0) {
-            delay(1000L)
-            lockoutSeconds -= 1
-        }
-    }
-
-    // PIN State
-    var enteredPin by remember { mutableStateOf("") }
-
-    // Registration Temp State
-    var regUsername by remember { mutableStateOf("") }
-    var regPin by remember { mutableStateOf("") }
-    var regPinConfirm by remember { mutableStateOf("") }
-    var regPattern by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var regPatternConfirm by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var regQuestion by remember { mutableStateOf("Game favorit Anda?") }
-    var regAnswer by remember { mutableStateOf("") }
-
-    // Recovery State
-    var recoveryAnswerInput by remember { mutableStateOf("") }
-    var resetNewPin by remember { mutableStateOf("") }
-    var resetNewPinConfirm by remember { mutableStateOf("") }
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = PaseoDarkBackground
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        PaseoDarkBackground,
+                        Color(0xFF15080E),
+                        PaseoDarkBackground
+                    )
+                )
+            )
+            .testTag("auth_screen_root"),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
+            verticalArrangement = Arrangement.Center
         ) {
-            // App Branding & Title
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+            // Header Logo & Branding
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(CrimsonContainer)
+                    .border(2.dp, CrimsonGlow, CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            Brush.linearGradient(listOf(CrimsonPrimary, CrimsonContainer))
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Security,
-                        contentDescription = "Shield Icon",
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "PASEO SENSI",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
-                        letterSpacing = 2.sp
-                    )
-                    Text(
-                        text = "SECURITY GATEWAY • BY ZUCCHERO XANN",
-                        fontSize = 10.sp,
-                        color = TextMuted,
-                        letterSpacing = 1.sp
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = "PASEO Security Shield",
+                    tint = CrimsonGlow,
+                    modifier = Modifier.size(38.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Error or Success Banner
-            AnimatedVisibility(visible = errorMessage != null, enter = fadeIn(), exit = fadeOut()) {
-                errorMessage?.let { msg ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0x33FF1744)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                            .border(1.dp, Color(0x66FF1744), RoundedCornerShape(12.dp))
-                    ) {
-                        Text(
-                            text = msg,
-                            color = Color(0xFFFF8A80),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
+            Text(
+                text = "PASEO SENSI",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp,
+                color = Color.White
+            )
 
-            AnimatedVisibility(visible = successMessage != null, enter = fadeIn(), exit = fadeOut()) {
-                successMessage?.let { msg ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0x3300E676)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                            .border(1.dp, Color(0x6600E676), RoundedCornerShape(12.dp))
-                    ) {
-                        Text(
-                            text = msg,
-                            color = EmeraldAccent,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
+            Text(
+                text = "INTERNAL SECURITY & ACCESS CONTROL",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.sp,
+                color = CrimsonGlow
+            )
 
-            if (lockoutSeconds > 0) {
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Lockout Banner
+            if (remainingLockout > 0) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0x44FF3333)),
-                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                        .border(1.dp, Color(0xFFFF3333), RoundedCornerShape(14.dp))
+                        .padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3B1015)),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "Terkunci",
-                            tint = Color(0xFFFF5252),
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Akses Ditangguhkan Sementara",
+                            text = "APLIKASI TERKUNCI SEMENTARA",
+                            color = Color(0xFFFF6666),
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Terlalu banyak percobaan salah. Coba lagi dalam $lockoutSeconds detik.",
-                            color = Color(0xFFFFCDD2),
+                            text = "Terlalu banyak percobaan gagal. Silakan tunggu $remainingLockout detik.",
+                            color = Color.White,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center
                         )
@@ -257,883 +199,703 @@ fun AuthScreen(
                 }
             }
 
-            when (currentScreenState) {
-                // ==========================================
-                // 1. LOGIN DENGAN PIN
-                // ==========================================
-                AuthScreenState.LOGIN_PIN -> {
-                    val user = activeAccount
+            // Error or Success Banner
+            if (errorMessage != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3D1414)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
                     Text(
-                        text = "Masuk dengan PIN",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Pengguna: ${user?.username ?: "Paseo Master"}",
+                        text = errorMessage!!,
+                        color = Color(0xFFFF7777),
                         fontSize = 12.sp,
-                        color = TextMuted,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(12.dp),
+                        textAlign = TextAlign.Center
                     )
+                }
+            }
 
-                    // Masked PIN bullets (never shows numbers)
-                    PinDotsRow(
-                        pinLength = enteredPin.length,
-                        maxDots = 6
+            if (successMessage != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F3018)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = successMessage!!,
+                        color = Color(0xFF66FF88),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(12.dp),
+                        textAlign = TextAlign.Center
                     )
+                }
+            }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Numeric Keypad
-                    NumericKeypad(
-                        enabled = lockoutSeconds == 0,
-                        onNumberClick = { num ->
+            // Main Content Card depending on mode
+            when (currentMode) {
+                AuthMode.LOGIN -> {
+                    LoginContent(
+                        authRepository = authRepository,
+                        loginType = loginType,
+                        isLockedOut = remainingLockout > 0,
+                        onLoginTypeChange = { loginType = it },
+                        onSuccess = { acc ->
                             errorMessage = null
-                            if (enteredPin.length < 8) {
-                                enteredPin += num
-                                if (user != null && enteredPin.length >= 4) {
-                                    // Automatic quick validation if matches 4-6 digits
-                                    val result = authRepository.verifyPin(user, enteredPin)
-                                    if (result is AuthResult.Success) {
-                                        onAuthSuccess()
-                                    } else if (enteredPin.length >= 6) {
-                                        // Process explicit failure if 6 digits reached
-                                        handleAuthResult(result) { err, lock ->
-                                            errorMessage = err
-                                            if (lock != null) lockoutSeconds = lock.toInt()
-                                            enteredPin = ""
+                            onAuthSuccess(acc)
+                        },
+                        onError = {
+                            errorMessage = it
+                            remainingLockout = authRepository.getRemainingLockoutSeconds()
+                        },
+                        onNavigateRegister = {
+                            errorMessage = null
+                            successMessage = null
+                            currentMode = AuthMode.REGISTER
+                        },
+                        onNavigateRecover = {
+                            errorMessage = null
+                            successMessage = null
+                            currentMode = AuthMode.RECOVER
+                        }
+                    )
+                }
+                AuthMode.REGISTER -> {
+                    RegisterContent(
+                        authRepository = authRepository,
+                        onSuccess = { newAcc ->
+                            errorMessage = null
+                            successMessage = "Akun '${newAcc.username}' berhasil didaftarkan!"
+                            currentMode = AuthMode.LOGIN
+                        },
+                        onError = { errorMessage = it },
+                        onCancel = if (hasAccounts) {
+                            {
+                                errorMessage = null
+                                currentMode = AuthMode.LOGIN
+                            }
+                        } else null
+                    )
+                }
+                AuthMode.RECOVER -> {
+                    RecoverContent(
+                        authRepository = authRepository,
+                        onSuccess = {
+                            errorMessage = null
+                            successMessage = "PIN berhasil dipulihkan! Silakan login dengan PIN baru."
+                            currentMode = AuthMode.LOGIN
+                        },
+                        onError = { errorMessage = it },
+                        onCancel = {
+                            errorMessage = null
+                            currentMode = AuthMode.LOGIN
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoginContent(
+    authRepository: AuthRepository,
+    loginType: LoginType,
+    isLockedOut: Boolean,
+    onLoginTypeChange: (LoginType) -> Unit,
+    onSuccess: (UserAccount) -> Unit,
+    onError: (String) -> Unit,
+    onNavigateRegister: () -> Unit,
+    onNavigateRecover: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = PaseoCardBackground),
+        shape = RoundedCornerShape(18.dp),
+        border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(CrimsonBorder, Color(0xFF2A2026))))
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Mode Selector Tabs (PIN vs Pattern)
+            TabRow(
+                selectedTabIndex = if (loginType == LoginType.PIN) 0 else 1,
+                containerColor = Color(0xFF1E151A),
+                contentColor = CrimsonGlow,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[if (loginType == LoginType.PIN) 0 else 1]),
+                        color = CrimsonPrimary
+                    )
+                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .padding(bottom = 18.dp)
+            ) {
+                Tab(
+                    selected = loginType == LoginType.PIN,
+                    onClick = { onLoginTypeChange(LoginType.PIN) },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Pin, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("LOGIN PIN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+                Tab(
+                    selected = loginType == LoginType.PATTERN,
+                    onClick = { onLoginTypeChange(LoginType.PATTERN) },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Gesture, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("LOGIN POLA", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+            }
+
+            if (loginType == LoginType.PIN) {
+                PinLoginSection(
+                    isLockedOut = isLockedOut,
+                    onPinSubmitted = { enteredPin ->
+                        val result = authRepository.loginWithPin(enteredPin)
+                        result.onSuccess(onSuccess).onFailure { onError(it.localizedMessage ?: "Login gagal") }
+                    }
+                )
+            } else {
+                PatternLoginSection(
+                    isLockedOut = isLockedOut,
+                    onPatternSubmitted = { patternNodes ->
+                        val result = authRepository.loginWithPattern(patternNodes)
+                        result.onSuccess(onSuccess).onFailure { onError(it.localizedMessage ?: "Pola salah") }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onNavigateRecover,
+                    modifier = Modifier.testTag("forgot_pin_button")
+                ) {
+                    Text("Lupa PIN?", color = Color(0xFFB0B0C0), fontSize = 12.sp)
+                }
+
+                TextButton(
+                    onClick = onNavigateRegister,
+                    modifier = Modifier.testTag("register_new_account_button")
+                ) {
+                    Text("Daftar Akun Baru", color = CrimsonGlow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PinLoginSection(
+    isLockedOut: Boolean,
+    onPinSubmitted: (String) -> Unit
+) {
+    var pinValue by remember { mutableStateOf("") }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Bullet Indicators
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(vertical = 12.dp)
+        ) {
+            val maxDisplay = 6
+            for (i in 0 until maxDisplay) {
+                val isFilled = i < pinValue.length
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(if (isFilled) CrimsonGlow else Color(0xFF2A2A38))
+                        .border(1.dp, if (isFilled) CrimsonPrimary else Color(0xFF444455), CircleShape)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Virtual Keypad
+        val keys = listOf(
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+            listOf("C", "0", "DEL")
+        )
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp)
+        ) {
+            for (row in keys) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    for (k in row) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1E1E28))
+                                .border(1.dp, Color(0xFF333344), RoundedCornerShape(12.dp))
+                                .clickable(enabled = !isLockedOut) {
+                                    when (k) {
+                                        "C" -> pinValue = ""
+                                        "DEL" -> if (pinValue.isNotEmpty()) pinValue = pinValue.dropLast(1)
+                                        else -> {
+                                            if (pinValue.length < 8) {
+                                                val next = pinValue + k
+                                                pinValue = next
+                                                if (next.length in 4..8) {
+                                                    // Trigger auto-submit or user press submit
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        },
-                        onBackspace = {
-                            if (enteredPin.isNotEmpty()) {
-                                enteredPin = enteredPin.dropLast(1)
-                            }
-                        },
-                        onConfirm = {
-                            if (user != null) {
-                                val result = authRepository.verifyPin(user, enteredPin)
-                                if (result is AuthResult.Success) {
-                                    onAuthSuccess()
-                                } else {
-                                    handleAuthResult(result) { err, lock ->
-                                        errorMessage = err
-                                        if (lock != null) lockoutSeconds = lock.toInt()
-                                        enteredPin = ""
-                                    }
-                                }
-                            }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        if (user?.patternHash != null) {
-                            TextButton(
-                                onClick = {
-                                    errorMessage = null
-                                    enteredPin = ""
-                                    currentScreenState = AuthScreenState.LOGIN_PATTERN
-                                }
-                            ) {
-                                Icon(Icons.Default.GridOn, contentDescription = null, tint = CrimsonGlow, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Gunakan Pola", color = CrimsonGlow, fontSize = 12.sp)
-                            }
-                        } else {
-                            Spacer(modifier = Modifier.width(1.dp))
-                        }
-
-                        TextButton(
-                            onClick = {
-                                errorMessage = null
-                                enteredPin = ""
-                                currentScreenState = AuthScreenState.FORGOT_CREDENTIALS
-                            }
+                                .testTag("keypad_key_$k"),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text("Lupa PIN?", color = TextMuted, fontSize = 12.sp)
-                        }
-                    }
-
-                    TextButton(
-                        onClick = {
-                            errorMessage = null
-                            enteredPin = ""
-                            currentScreenState = AuthScreenState.REGISTER_STEP1_PROFILE
-                        }
-                    ) {
-                        Text("Daftar Akun Baru", color = TextSecondary, fontSize = 12.sp)
-                    }
-                }
-
-                // ==========================================
-                // 2. LOGIN DENGAN POLA
-                // ==========================================
-                AuthScreenState.LOGIN_PATTERN -> {
-                    val user = activeAccount
-                    Text(
-                        text = "Masuk dengan Pola",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Tarik garis pola penguncian Anda",
-                        fontSize = 12.sp,
-                        color = TextMuted,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
-                    )
-
-                    PatternLockView(
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .padding(vertical = 8.dp),
-                        enabled = lockoutSeconds == 0,
-                        isError = errorMessage != null,
-                        onPatternCompleted = { patternDots ->
-                            errorMessage = null
-                            if (user != null) {
-                                val result = authRepository.verifyPattern(user, patternDots)
-                                if (result is AuthResult.Success) {
-                                    onAuthSuccess()
-                                } else {
-                                    handleAuthResult(result) { err, lock ->
-                                        errorMessage = err
-                                        if (lock != null) lockoutSeconds = lock.toInt()
-                                    }
-                                }
-                            }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        TextButton(
-                            onClick = {
-                                errorMessage = null
-                                currentScreenState = AuthScreenState.LOGIN_PIN
-                            }
-                        ) {
-                            Icon(Icons.Default.Pin, contentDescription = null, tint = CrimsonGlow, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Gunakan PIN", color = CrimsonGlow, fontSize = 12.sp)
-                        }
-
-                        TextButton(
-                            onClick = {
-                                errorMessage = null
-                                currentScreenState = AuthScreenState.FORGOT_CREDENTIALS
-                            }
-                        ) {
-                            Text("Lupa Pola?", color = TextMuted, fontSize = 12.sp)
-                        }
-                    }
-
-                    TextButton(
-                        onClick = {
-                            errorMessage = null
-                            currentScreenState = AuthScreenState.REGISTER_STEP1_PROFILE
-                        }
-                    ) {
-                        Text("Daftar Akun Baru", color = TextSecondary, fontSize = 12.sp)
-                    }
-                }
-
-                // ==========================================
-                // 3. REGISTRASI — STEP 1: USERNAME
-                // ==========================================
-                AuthScreenState.REGISTER_STEP1_PROFILE -> {
-                    Text(
-                        text = "Registrasi Akun Baru",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Langkah 1 dari 4: Nama Pengguna",
-                        fontSize = 12.sp,
-                        color = CrimsonGlow,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
-                    )
-
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, PaseoBorderDark, RoundedCornerShape(16.dp))
-                            .padding(4.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            OutlinedTextField(
-                                value = regUsername,
-                                onValueChange = { regUsername = it },
-                                label = { Text("Nama Pengguna / Nickname") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("reg_username_input"),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = CrimsonPrimary,
-                                    unfocusedBorderColor = PaseoBorderDark,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Text(
-                                text = "Keamanan Kredensial:",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "• PIN dan Pola disimpan dalam bentuk salted PBKDF2 hash, bukan teks biasa.\n• Keunikan PIN diperiksa melalui HMAC berkunci pada database lokal.\n• Sistem ini hanya untuk keamanan internal aplikasi PASEO SENSI dan tidak mengubah kunci lockscreen Android Anda.",
-                                fontSize = 11.sp,
-                                color = TextMuted,
-                                lineHeight = 16.sp,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            if (regUsername.trim().length < 3) {
-                                errorMessage = "Nama pengguna minimal 3 karakter."
+                            if (k == "DEL") {
+                                Icon(Icons.Default.Backspace, contentDescription = "Hapus", tint = Color.White, modifier = Modifier.size(20.dp))
                             } else {
-                                errorMessage = null
-                                currentScreenState = AuthScreenState.REGISTER_STEP2_PIN
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("reg_step1_next_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Lanjutkan ke Pembuatan PIN", fontWeight = FontWeight.Bold)
-                    }
-
-                    if (hasAccounts) {
-                        TextButton(
-                            onClick = {
-                                errorMessage = null
-                                currentScreenState = AuthScreenState.LOGIN_PIN
-                            },
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) {
-                            Text("Sudah punya akun? Masuk", color = TextSecondary, fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                // ==========================================
-                // 4. REGISTRASI — STEP 2: PIN & KONFIRMASI
-                // ==========================================
-                AuthScreenState.REGISTER_STEP2_PIN -> {
-                    Text(
-                        text = "Buat PIN Keamanan",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Langkah 2 dari 4: PIN 4-8 Digit",
-                        fontSize = 12.sp,
-                        color = CrimsonGlow,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
-                    )
-
-                    OutlinedTextField(
-                        value = regPin,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) regPin = it },
-                        label = { Text("PIN Baru (4-8 Digit)") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("reg_pin_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CrimsonPrimary,
-                            unfocusedBorderColor = PaseoBorderDark,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = regPinConfirm,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) regPinConfirm = it },
-                        label = { Text("Konfirmasi PIN Baru") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("reg_pin_confirm_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CrimsonPrimary,
-                            unfocusedBorderColor = PaseoBorderDark,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "Aturan Keamanan PIN:",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted
-                    )
-                    Text(
-                        text = "• Ditolak jika angka berulang (misal: 1111, 7777)\n• Ditolak jika urutan sederhana (misal: 1234, 4321)\n• Ditolak jika PIN sudah terdaftar pada database lokal",
-                        fontSize = 11.sp,
-                        color = TextMuted,
-                        lineHeight = 15.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            val validation = authRepository.validatePin(regPin)
-                            if (validation is ValidationResult.Invalid) {
-                                errorMessage = validation.reason
-                            } else if (regPin != regPinConfirm) {
-                                errorMessage = "PIN baru dan Konfirmasi PIN tidak cocok!"
-                            } else if (authRepository.isPinRegisteredInLocalDatabase(regPin)) {
-                                errorMessage = "PIN ini sudah terdaftar pada database lokal. Harap gunakan kombinasi lain demi keamanan."
-                            } else {
-                                errorMessage = null
-                                currentScreenState = AuthScreenState.REGISTER_STEP3_PATTERN
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("reg_step2_next_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Lanjutkan ke Pola Penguncian", fontWeight = FontWeight.Bold)
-                    }
-
-                    TextButton(
-                        onClick = { currentScreenState = AuthScreenState.REGISTER_STEP1_PROFILE }
-                    ) {
-                        Text("Kembali", color = TextMuted)
-                    }
-                }
-
-                // ==========================================
-                // 5. REGISTRASI — STEP 3: POLA (Pattern)
-                // ==========================================
-                AuthScreenState.REGISTER_STEP3_PATTERN -> {
-                    val isFirstPattern = regPattern.isEmpty()
-                    Text(
-                        text = if (isFirstPattern) "Buat Pola Baru" else "Konfirmasi Pola",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = if (isFirstPattern)
-                            "Langkah 3 dari 4: Hubungkan minimal 4 titik"
-                        else
-                            "Tarik kembali pola yang sama untuk konfirmasi",
-                        fontSize = 12.sp,
-                        color = CrimsonGlow,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                    )
-
-                    PatternLockView(
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .padding(vertical = 8.dp),
-                        isError = errorMessage != null,
-                        onPatternCompleted = { patternDots ->
-                            errorMessage = null
-                            if (isFirstPattern) {
-                                val validation = authRepository.validatePattern(patternDots)
-                                if (validation is ValidationResult.Invalid) {
-                                    errorMessage = validation.reason
-                                } else {
-                                    regPattern = patternDots
-                                    successMessage = "Pola pertama tersimpan. Ulangi untuk konfirmasi."
-                                }
-                            } else {
-                                if (patternDots != regPattern) {
-                                    errorMessage = "Pola konfirmasi tidak cocok. Ulangi dari awal."
-                                    regPattern = emptyList()
-                                } else {
-                                    regPatternConfirm = patternDots
-                                    successMessage = "Pola valid dan terkonfirmasi!"
-                                    currentScreenState = AuthScreenState.REGISTER_STEP4_RECOVERY
-                                }
-                            }
-                        }
-                    )
-
-                    if (!isFirstPattern) {
-                        TextButton(
-                            onClick = {
-                                regPattern = emptyList()
-                                regPatternConfirm = emptyList()
-                                errorMessage = null
-                                successMessage = null
-                            }
-                        ) {
-                            Text("Reset dan Gambar Ulang Pola", color = CrimsonGlow, fontSize = 12.sp)
-                        }
-                    }
-
-                    TextButton(
-                        onClick = { currentScreenState = AuthScreenState.REGISTER_STEP2_PIN }
-                    ) {
-                        Text("Kembali ke PIN", color = TextMuted)
-                    }
-                }
-
-                // ==========================================
-                // 6. REGISTRASI — STEP 4: RECOVERY QUESTION
-                // ==========================================
-                AuthScreenState.REGISTER_STEP4_RECOVERY -> {
-                    Text(
-                        text = "Pertanyaan Pemulihan",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Langkah 4 dari 4: Digunakan saat Anda lupa PIN/Pola",
-                        fontSize = 12.sp,
-                        color = CrimsonGlow,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
-                    )
-
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, PaseoBorderDark, RoundedCornerShape(16.dp))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Pilih / Tulis Pertanyaan Keamanan:",
-                                fontSize = 12.sp,
-                                color = TextSecondary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = regQuestion,
-                                onValueChange = { regQuestion = it },
-                                label = { Text("Pertanyaan Keamanan") },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = CrimsonPrimary,
-                                    unfocusedBorderColor = PaseoBorderDark,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
+                                Text(
+                                    text = k,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (k == "C") Color(0xFFFF6666) else Color.White
                                 )
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            OutlinedTextField(
-                                value = regAnswer,
-                                onValueChange = { regAnswer = it },
-                                label = { Text("Jawaban Rahasia") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("reg_answer_input"),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = CrimsonPrimary,
-                                    unfocusedBorderColor = PaseoBorderDark,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-                            Text(
-                                text = "Jawaban akan di-hash secara aman bersama salt unik.",
-                                fontSize = 10.sp,
-                                color = TextMuted,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            if (regAnswer.trim().length < 2) {
-                                errorMessage = "Jawaban keamanan minimal 2 karakter."
-                            } else {
-                                val salt = authRepository.generateSalt()
-                                val pinHashed = authRepository.hashCredential(regPin, salt)
-                                val hmacLookup = authRepository.computeHmacPinLookup(regPin)
-                                val patternString = regPattern.joinToString("-")
-                                val patternHashed = authRepository.hashCredential(patternString, salt)
-                                val answerHashed = authRepository.hashCredential(regAnswer.trim().lowercase(), salt)
-
-                                val newAccount = UserAccount(
-                                    id = UUID.randomUUID().toString(),
-                                    username = regUsername.trim(),
-                                    saltHex = salt,
-                                    pinHash = pinHashed,
-                                    hmacPinLookup = hmacLookup,
-                                    patternHash = patternHashed,
-                                    recoveryQuestion = regQuestion.trim(),
-                                    recoveryAnswerHash = answerHashed,
-                                    preferredAuthMode = AuthMode.PIN
-                                )
-
-                                authRepository.saveAccount(newAccount)
-                                authRepository.setAppLocked(false)
-                                successMessage = "Akun berhasil didaftarkan!"
-                                onAuthSuccess()
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("reg_finish_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Selesaikan Registrasi", fontWeight = FontWeight.Bold)
-                    }
-
-                    TextButton(
-                        onClick = { currentScreenState = AuthScreenState.REGISTER_STEP3_PATTERN }
-                    ) {
-                        Text("Kembali", color = TextMuted)
-                    }
-                }
-
-                // ==========================================
-                // 7. LUPA PIN / PEMULIHAN AKUN
-                // ==========================================
-                AuthScreenState.FORGOT_CREDENTIALS -> {
-                    val user = activeAccount
-                    Text(
-                        text = "Pemulihan Akun PASEO SENSI",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Jawab pertanyaan keamanan akun Anda untuk reset",
-                        fontSize = 12.sp,
-                        color = TextMuted,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
-                    )
-
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, PaseoBorderDark, RoundedCornerShape(16.dp))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Pertanyaan:",
-                                fontSize = 11.sp,
-                                color = TextMuted
-                            )
-                            Text(
-                                text = user?.recoveryQuestion ?: "Game favorit Anda?",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            OutlinedTextField(
-                                value = recoveryAnswerInput,
-                                onValueChange = { recoveryAnswerInput = it },
-                                label = { Text("Jawaban Anda") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("recovery_answer_input"),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = CrimsonPrimary,
-                                    unfocusedBorderColor = PaseoBorderDark,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            if (user != null && authRepository.verifyRecoveryAnswer(user, recoveryAnswerInput)) {
-                                errorMessage = null
-                                successMessage = "Verifikasi berhasil! Silakan buat PIN baru."
-                                currentScreenState = AuthScreenState.RESET_CREDENTIALS
-                            } else {
-                                errorMessage = "Jawaban keamanan salah. Akses pemulihan ditolak."
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("verify_recovery_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.LockReset, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Verifikasi Jawaban", fontWeight = FontWeight.Bold)
-                    }
-
-                    TextButton(
-                        onClick = {
-                            errorMessage = null
-                            currentScreenState = AuthScreenState.LOGIN_PIN
-                        }
-                    ) {
-                        Text("Batal & Kembali ke Login", color = TextMuted)
-                    }
-                }
-
-                // ==========================================
-                // 8. RESET KREDENSIAL BARU
-                // ==========================================
-                AuthScreenState.RESET_CREDENTIALS -> {
-                    val user = activeAccount
-                    Text(
-                        text = "Setel Ulang PIN",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Masukkan PIN baru 4-8 digit angka",
-                        fontSize = 12.sp,
-                        color = CrimsonGlow,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
-                    )
-
-                    OutlinedTextField(
-                        value = resetNewPin,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) resetNewPin = it },
-                        label = { Text("PIN Baru (4-8 Digit)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CrimsonPrimary,
-                            unfocusedBorderColor = PaseoBorderDark,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = resetNewPinConfirm,
-                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) resetNewPinConfirm = it },
-                        label = { Text("Konfirmasi PIN Baru") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CrimsonPrimary,
-                            unfocusedBorderColor = PaseoBorderDark,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            val validation = authRepository.validatePin(resetNewPin)
-                            if (validation is ValidationResult.Invalid) {
-                                errorMessage = validation.reason
-                            } else if (resetNewPin != resetNewPinConfirm) {
-                                errorMessage = "PIN baru dan Konfirmasi PIN tidak cocok!"
-                            } else if (authRepository.isPinRegisteredInLocalDatabase(resetNewPin, excludeUserId = user?.id)) {
-                                errorMessage = "PIN ini sudah terdaftar pada database lokal. Harap pilih kombinasi lain."
-                            } else if (user != null) {
-                                val newSalt = authRepository.generateSalt()
-                                val pinHash = authRepository.hashCredential(resetNewPin, newSalt)
-                                val hmacLookup = authRepository.computeHmacPinLookup(resetNewPin)
-                                val updated = user.copy(
-                                    saltHex = newSalt,
-                                    pinHash = pinHash,
-                                    hmacPinLookup = hmacLookup,
-                                    failedAttempts = 0,
-                                    lockUntilTimestamp = 0L
-                                )
-                                authRepository.saveAccount(updated)
-                                authRepository.setAppLocked(false)
-                                successMessage = "PIN berhasil diperbarui!"
-                                onAuthSuccess()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Simpan PIN Baru", fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
-    }
-}
 
-private inline fun handleAuthResult(
-    result: AuthResult,
-    crossinline onError: (String, Long?) -> Unit
-) {
-    when (result) {
-        is AuthResult.Success -> {}
-        is AuthResult.Failure -> {
-            val note = if (result.remainingAttempts != null) {
-                "${result.message} Sisa percobaan: ${result.remainingAttempts}"
-            } else {
-                result.message
-            }
-            onError(note, null)
-        }
-        is AuthResult.LockedOut -> {
-            onError("Terlalu banyak percobaan gagal. Aplikasi dikunci sementara.", result.waitSeconds)
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Button(
+            onClick = {
+                if (pinValue.isNotBlank()) {
+                    onPinSubmitted(pinValue)
+                }
+            },
+            enabled = !isLockedOut && pinValue.length >= 4,
+            colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .testTag("submit_pin_login_button"),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Text("MASUK DENGAN PIN", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         }
     }
 }
 
 @Composable
-private fun PinDotsRow(pinLength: Int, maxDots: Int = 6) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun PatternLoginSection(
+    isLockedOut: Boolean,
+    onPatternSubmitted: (List<Int>) -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "Hubungkan titik-titik pola untuk masuk",
+            color = Color(0xFFAAAAAA),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+        )
+
+        PatternLockView(
+            enabled = !isLockedOut,
+            onPatternComplete = onPatternSubmitted
+        )
+    }
+}
+
+@Composable
+private fun RegisterContent(
+    authRepository: AuthRepository,
+    onSuccess: (UserAccount) -> Unit,
+    onError: (String) -> Unit,
+    onCancel: (() -> Unit)?
+) {
+    var username by remember { mutableStateOf("") }
+    var pin by remember { mutableStateOf("") }
+    var pinConfirm by remember { mutableStateOf("") }
+    var securityQuestion by remember { mutableStateOf("Apa nama perangkat gaming favorit Anda?") }
+    var securityAnswer by remember { mutableStateOf("") }
+
+    var recordPattern by remember { mutableStateOf(false) }
+    var patternStep by remember { mutableIntStateOf(0) } // 0: not started, 1: draw first, 2: confirm
+    var firstPattern by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var confirmedPattern by remember { mutableStateOf<List<Int>>(emptyList()) }
+
+    var pinVisible by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = PaseoCardBackground),
+        shape = RoundedCornerShape(18.dp),
+        border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(CrimsonBorder, Color(0xFF2A2026))))
     ) {
-        val count = maxDots.coerceAtLeast(4)
-        for (i in 0 until count) {
-            val isFilled = i < pinLength
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isFilled) CrimsonPrimary else PaseoBorderDark
-                    )
-                    .border(
-                        1.5.dp,
-                        if (isFilled) CrimsonGlow else Color(0xFF3A3B4D),
-                        CircleShape
-                    )
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "REGISTRASI AKUN BARU",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = Color.White
             )
-        }
-    }
-}
 
-@Composable
-private fun NumericKeypad(
-    enabled: Boolean,
-    onNumberClick: (String) -> Unit,
-    onBackspace: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    val keyRows = listOf(
-        listOf("1", "2", "3"),
-        listOf("4", "5", "6"),
-        listOf("7", "8", "9"),
-        listOf("C", "0", "DEL")
-    )
+            Text(
+                text = "Kredensial disimpan terenkripsi dengan PBKDF2 & HMAC",
+                fontSize = 11.sp,
+                color = Color(0xFFAAAAAA),
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+            )
 
-    Column(
-        modifier = Modifier.fillMaxWidth(0.85f),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        keyRows.forEach { row ->
+            // Username Field
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username Akun") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("register_username_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // PIN Field
+            OutlinedTextField(
+                value = pin,
+                onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) pin = it },
+                label = { Text("PIN Baru (4-8 Digit)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = if (pinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { pinVisible = !pinVisible }) {
+                        Icon(if (pinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = null, tint = Color.Gray)
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("register_pin_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // PIN Confirm Field
+            OutlinedTextField(
+                value = pinConfirm,
+                onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) pinConfirm = it },
+                label = { Text("Konfirmasi PIN") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("register_pin_confirm_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Security Question & Answer
+            OutlinedTextField(
+                value = securityQuestion,
+                onValueChange = { securityQuestion = it },
+                label = { Text("Pertanyaan Pemulihan") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("register_security_question_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = securityAnswer,
+                onValueChange = { securityAnswer = it },
+                label = { Text("Jawaban Pemulihan") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("register_security_answer_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Optional Pattern Toggle
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF1E1A22))
+                    .clickable { recordPattern = !recordPattern }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                row.forEach { key ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (key == "C" || key == "DEL") PaseoSurfaceCard else PaseoSurfaceDark
-                            )
-                            .border(
-                                1.dp,
-                                if (key == "C" || key == "DEL") PaseoBorderGlow.copy(alpha = 0.5f) else PaseoBorderDark,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .clickable(enabled = enabled) {
-                                when (key) {
-                                    "DEL" -> onBackspace()
-                                    "C" -> onConfirm()
-                                    else -> onNumberClick(key)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Gesture, contentDescription = null, tint = CrimsonGlow, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Tambahkan Kunci Pola", color = Color.White, fontSize = 13.sp)
+                }
+                Icon(
+                    imageVector = if (recordPattern) Icons.Default.Check else Icons.Default.Pin,
+                    contentDescription = null,
+                    tint = if (recordPattern) CrimsonGlow else Color.Gray
+                )
+            }
+
+            AnimatedVisibility(visible = recordPattern) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(top = 10.dp)
+                ) {
+                    val statusText = when {
+                        firstPattern.isEmpty() -> "Gambar pola pertama kali (min. 4 titik)"
+                        confirmedPattern.isEmpty() -> "Ulangi pola untuk konfirmasi"
+                        firstPattern == confirmedPattern -> "Pola cocok dan siap disimpan!"
+                        else -> "Pola tidak cocok! Silakan coba lagi."
+                    }
+
+                    Text(statusText, color = CrimsonGlow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+
+                    PatternLockView(
+                        onPatternComplete = { drawn ->
+                            if (firstPattern.isEmpty()) {
+                                firstPattern = drawn
+                            } else if (confirmedPattern.isEmpty()) {
+                                if (firstPattern == drawn) {
+                                    confirmedPattern = drawn
+                                } else {
+                                    firstPattern = emptyList()
+                                    confirmedPattern = emptyList()
                                 }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (key == "DEL") {
-                            Icon(
-                                imageVector = Icons.Default.Backspace,
-                                contentDescription = "Hapus",
-                                tint = if (enabled) Color(0xFFFF8A80) else Color.Gray,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        } else if (key == "C") {
-                            Text(
-                                text = "OK",
-                                color = if (enabled) CrimsonGlow else Color.Gray,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            )
-                        } else {
-                            Text(
-                                text = key,
-                                color = if (enabled) Color.White else Color.Gray,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            }
+                        }
+                    )
+
+                    if (firstPattern.isNotEmpty()) {
+                        TextButton(onClick = {
+                            firstPattern = emptyList()
+                            confirmedPattern = emptyList()
+                        }) {
+                            Text("Reset Pola", color = Color(0xFFFF6666), fontSize = 11.sp)
                         }
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Action Buttons
+            Button(
+                onClick = {
+                    if (recordPattern && confirmedPattern.isEmpty()) {
+                        onError("Harap selesaikan pembuatan dan konfirmasi pola.")
+                        return@Button
+                    }
+                    val patternToSave = if (recordPattern) confirmedPattern else null
+                    val res = authRepository.registerAccount(
+                        username = username,
+                        pin = pin,
+                        pinConfirm = pinConfirm,
+                        patternNodes = patternToSave,
+                        securityQuestion = securityQuestion,
+                        securityAnswer = securityAnswer
+                    )
+                    res.onSuccess(onSuccess).onFailure { onError(it.localizedMessage ?: "Registrasi gagal") }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .testTag("submit_register_button"),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("SIMPAN & DAFTARKAN AKUN", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            }
+
+            if (onCancel != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onCancel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("cancel_register_button"),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Batal", color = Color.White)
                 }
             }
         }
     }
 }
+
+@Composable
+private fun RecoverContent(
+    authRepository: AuthRepository,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var username by remember { mutableStateOf("") }
+    var answer by remember { mutableStateOf("") }
+    var newPin by remember { mutableStateOf("") }
+    var newPinConfirm by remember { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = PaseoCardBackground),
+        shape = RoundedCornerShape(18.dp),
+        border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(CrimsonBorder, Color(0xFF2A2026))))
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "PEMULIHAN AKUN & RESET PIN",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = Color.White
+            )
+
+            Text(
+                text = "Masukkan jawaban pertanyaan pemulihan yang telah didaftarkan",
+                fontSize = 11.sp,
+                color = Color(0xFFAAAAAA),
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+            )
+
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username Akun") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("recover_username_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = answer,
+                onValueChange = { answer = it },
+                label = { Text("Jawaban Pertanyaan Pemulihan") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("recover_answer_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = newPin,
+                onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) newPin = it },
+                label = { Text("PIN Baru") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("recover_new_pin_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = newPinConfirm,
+                onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) newPinConfirm = it },
+                label = { Text("Konfirmasi PIN Baru") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("recover_new_pin_confirm_input"),
+                colors = outlinedTextFieldColors()
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Button(
+                onClick = {
+                    val res = authRepository.recoverAccount(username, answer, newPin, newPinConfirm)
+                    res.onSuccess { onSuccess() }.onFailure { onError(it.localizedMessage ?: "Pemulihan gagal") }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .testTag("submit_recovery_button"),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("RESET DAN PULIHKAN PIN", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .testTag("cancel_recovery_button"),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Kembali ke Login", color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun outlinedTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = CrimsonPrimary,
+    unfocusedBorderColor = Color(0xFF3E323A),
+    focusedLabelColor = CrimsonGlow,
+    unfocusedLabelColor = Color(0xFFAAAAAA),
+    cursorColor = CrimsonGlow,
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White
+)

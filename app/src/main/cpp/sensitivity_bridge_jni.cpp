@@ -1,80 +1,104 @@
+/**
+ * PASEO SENSI — JNI Bridge to C++ Sensitivity Engine
+ * Developer: ZUCCHERO XANN
+ * Project: PASEO-TOOLS-
+ */
+
 #include <jni.h>
-#include <string>
-#include <memory>
 #include "sensitivity_engine.h"
 
-static std::unique_ptr<paseosensi::SensitivityEngine> g_engine = nullptr;
+using namespace paseo;
 
 extern "C" {
 
-JNIEXPORT jstring JNICALL
-Java_com_example_nativecore_SensitivityBridge_nativeGetEngineVersion(
-    JNIEnv* env,
-    jobject /* this */
-) {
-    return env->NewStringUTF(paseosensi::SensitivityEngine::getVersion());
+JNIEXPORT jlong JNICALL
+Java_com_example_nativecore_SensitivityBridge_createEngineNative(
+        JNIEnv* env,
+        jobject thiz,
+        jfloat sensiX,
+        jfloat sensiY,
+        jfloat deadzone,
+        jfloat smoothing,
+        jfloat acceleration,
+        jint curveType) {
+    EngineConfig cfg;
+    cfg.sensiX = sensiX;
+    cfg.sensiY = sensiY;
+    cfg.deadzone = deadzone;
+    cfg.smoothing = smoothing;
+    cfg.acceleration = acceleration;
+    cfg.curveType = curveType;
+
+    auto* engine = new SensitivityEngine(cfg);
+    return reinterpret_cast<jlong>(engine);
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_nativecore_SensitivityBridge_updateConfigNative(
+        JNIEnv* env,
+        jobject thiz,
+        jlong enginePtr,
+        jfloat sensiX,
+        jfloat sensiY,
+        jfloat deadzone,
+        jfloat smoothing,
+        jfloat acceleration,
+        jint curveType) {
+    if (enginePtr == 0) return;
+    auto* engine = reinterpret_cast<SensitivityEngine*>(enginePtr);
+    EngineConfig cfg;
+    cfg.sensiX = sensiX;
+    cfg.sensiY = sensiY;
+    cfg.deadzone = deadzone;
+    cfg.smoothing = smoothing;
+    cfg.acceleration = acceleration;
+    cfg.curveType = curveType;
+    engine->setConfig(cfg);
 }
 
 JNIEXPORT jfloatArray JNICALL
-Java_com_example_nativecore_SensitivityBridge_nativeCalculateTransformedPoint(
-    JNIEnv* env,
-    jobject /* this */,
-    jfloat rawDeltaX,
-    jfloat rawDeltaY,
-    jfloat sensiMultiplierX,
-    jfloat sensiMultiplierY,
-    jint curveTypeInt,
-    jfloat smoothingFactor,
-    jfloat deadzoneThreshold,
-    jfloat accelerationFactor,
-    jfloat deltaTimeMs
-) {
-    if (!g_engine) {
-        g_engine = std::make_unique<paseosensi::SensitivityEngine>();
+Java_com_example_nativecore_SensitivityBridge_processDeltaNative(
+        JNIEnv* env,
+        jobject thiz,
+        jlong enginePtr,
+        jfloat rawDx,
+        jfloat rawDy,
+        jfloat dtSec) {
+    jfloatArray result = env->NewFloatArray(2);
+    if (result == nullptr) return nullptr;
+
+    if (enginePtr == 0) {
+        jfloat defaultVals[2] = { rawDx, rawDy };
+        env->SetFloatArrayRegion(result, 0, 2, defaultVals);
+        return result;
     }
 
-    paseosensi::CurveType curve = static_cast<paseosensi::CurveType>(curveTypeInt);
-    paseosensi::TransformedPoint result = g_engine->calculateTransformedPoint(
-        rawDeltaX,
-        rawDeltaY,
-        sensiMultiplierX,
-        sensiMultiplierY,
-        curve,
-        smoothingFactor,
-        deadzoneThreshold,
-        accelerationFactor,
-        deltaTimeMs
-    );
+    auto* engine = reinterpret_cast<SensitivityEngine*>(enginePtr);
+    Vector2D transformed = engine->processDelta(rawDx, rawDy, dtSec);
 
-    jfloatArray outputArray = env->NewFloatArray(5);
-    if (!outputArray) {
-        return nullptr;
-    }
-
-    jfloat outBuf[5] = {
-        result.x,
-        result.y,
-        result.velocity,
-        result.appliedMultiplierX,
-        result.appliedMultiplierY
-    };
-
-    env->SetFloatArrayRegion(outputArray, 0, 5, outBuf);
-    return outputArray;
+    jfloat outputVals[2] = { transformed.x, transformed.y };
+    env->SetFloatArrayRegion(result, 0, 2, outputVals);
+    return result;
 }
 
-JNIEXPORT jfloat JNICALL
-Java_com_example_nativecore_SensitivityBridge_nativeCalculateVelocity(
-    JNIEnv* /* env */,
-    jobject /* this */,
-    jfloat deltaX,
-    jfloat deltaY,
-    jfloat deltaTimeMs
-) {
-    if (!g_engine) {
-        g_engine = std::make_unique<paseosensi::SensitivityEngine>();
-    }
-    return g_engine->calculateVelocity(deltaX, deltaY, deltaTimeMs);
+JNIEXPORT void JNICALL
+Java_com_example_nativecore_SensitivityBridge_resetNative(
+        JNIEnv* env,
+        jobject thiz,
+        jlong enginePtr) {
+    if (enginePtr == 0) return;
+    auto* engine = reinterpret_cast<SensitivityEngine*>(enginePtr);
+    engine->reset();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_nativecore_SensitivityBridge_destroyEngineNative(
+        JNIEnv* env,
+        jobject thiz,
+        jlong enginePtr) {
+    if (enginePtr == 0) return;
+    auto* engine = reinterpret_cast<SensitivityEngine*>(enginePtr);
+    delete engine;
 }
 
 } // extern "C"

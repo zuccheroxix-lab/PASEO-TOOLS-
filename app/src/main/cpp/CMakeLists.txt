@@ -1,27 +1,28 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-project("paseosensi_native")
+project("sensitivity_engine")
 
-add_library(
-    paseosensi_native
-    SHARED
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Shared library for Android JNI
+add_library(sensitivity_engine SHARED
     sensitivity_engine.cpp
     sensitivity_bridge_jni.cpp
 )
 
-find_library(
-    log-lib
-    log
-)
+find_library(log-lib log)
+find_library(android-lib android)
 
-target_link_libraries(
-    paseosensi_native
+target_link_libraries(sensitivity_engine
     ${log-lib}
+    ${android-lib}
 )
 
-# Standalone CLI demo / test harness executable for PC / Desktop targets
-add_executable(
-    paseo_sensitivity_cli
-    sensitivity_engine_desktop_cli.cpp
-    sensitivity_engine.cpp
-)
+# Optional standalone executable for desktop / CLI verification
+if (NOT ANDROID)
+    add_executable(sensitivity_engine_cli
+        sensitivity_engine.cpp
+        sensitivity_engine_desktop_cli.cpp
+    )
+endif()
