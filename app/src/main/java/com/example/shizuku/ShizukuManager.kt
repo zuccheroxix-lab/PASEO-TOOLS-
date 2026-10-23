@@ -220,12 +220,23 @@ class ShizukuManager(private val context: Context) {
         }
     }
 
+    fun isAuthorized(): Boolean {
+        return try {
+            Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     companion object {
         const val REQUEST_CODE_PERMISSION = 1001
 
         private val ALLOWED_COMMAND_PREFIXES = listOf(
             "wm size",
             "wm density",
+            "input tap",
+            "input swipe",
+            "input keyevent",
             "settings get system pointer_location",
             "settings put system pointer_location",
             "settings get system pointer_speed",

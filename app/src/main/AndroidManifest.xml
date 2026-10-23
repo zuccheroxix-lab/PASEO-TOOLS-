@@ -55,6 +55,16 @@
                 android:value="Aim assistant crosshair overlay for custom in-game aim calibration and accessibility" />
         </service>
 
+        <!-- Mobilador Floating Keymapper Overlay Service -->
+        <service
+            android:name=".service.MobiladorOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating keymapper HUD and input overlay for keyboard and mouse game controller mapping" />
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

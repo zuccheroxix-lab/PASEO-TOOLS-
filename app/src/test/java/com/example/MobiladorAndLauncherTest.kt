@@ -151,4 +151,60 @@ class MobiladorAndLauncherTest {
         assertEquals("com.example.game", realApp.packageName)
         assertTrue(realApp.isGame)
     }
+
+    @Test
+    fun testInputInjectionManagerCapabilities() {
+        val shizukuManager = com.example.shizuku.ShizukuManager(context)
+        val injectionMgr = com.example.service.InputInjectionManager(context, shizukuManager)
+
+        // Without hardware converter or active shizuku
+        val cap1 = injectionMgr.getCapability(hasHardwareConverter = false)
+        assertEquals(com.example.service.InjectionCapability.VISUAL_HUD_ONLY, cap1)
+        assertFalse(cap1.canInjectCrossApp)
+
+        // With hardware converter connected
+        val cap2 = injectionMgr.getCapability(hasHardwareConverter = true)
+        assertEquals(com.example.service.InjectionCapability.HARDWARE_CONVERTER, cap2)
+        assertTrue(cap2.canInjectCrossApp)
+    }
+
+    @Test
+    fun testMobiladorOverlayServiceProfileSync() {
+        val active = mobiladorRepository.activeProfile.value
+        com.example.service.MobiladorOverlayService.updateProfile(active)
+        assertEquals(active.id, com.example.service.MobiladorOverlayService.activeProfileFlow.value?.id)
+
+        // Test Opacity flow
+        com.example.service.MobiladorOverlayService.overlayOpacity.value = 0.5f
+        assertEquals(0.5f, com.example.service.MobiladorOverlayService.overlayOpacity.value, 0.01f)
+
+        // Service stop cleans up running flag
+        com.example.service.MobiladorOverlayService.stop(context)
+        assertFalse(com.example.service.MobiladorOverlayService.isOverlayRunning.value)
+    }
+
+    @Test
+    fun testMappingElementJsonIntegrity() {
+        val original = MappingElement(
+            name = "Prone Action",
+            type = MappingElementType.PRONE,
+            keyBinding = "Z",
+            keyCode = 54,
+            normalizedX = 0.75f,
+            normalizedY = 0.85f,
+            sizeDp = 52f,
+            opacity = 0.9f,
+            sensitivity = 1.2f
+        )
+        val json = original.toJson()
+        val parsed = MappingElement.fromJson(json)
+
+        assertEquals(original.name, parsed.name)
+        assertEquals(original.type, parsed.type)
+        assertEquals(original.keyBinding, parsed.keyBinding)
+        assertEquals(original.keyCode, parsed.keyCode)
+        assertEquals(original.normalizedX, parsed.normalizedX, 0.001f)
+        assertEquals(original.normalizedY, parsed.normalizedY, 0.001f)
+        assertEquals(original.sizeDp, parsed.sizeDp, 0.001f)
+    }
 }

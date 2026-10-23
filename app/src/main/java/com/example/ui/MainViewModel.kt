@@ -532,6 +532,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showMessage("Profil sensitivitas '${saved.name}' berhasil disimpan untuk $gameName.")
     }
 
+    val inputInjectionManager = com.example.service.InputInjectionManager(context, shizukuManager)
+    val isMobiladorOverlayRunning: StateFlow<Boolean> = com.example.service.MobiladorOverlayService.isOverlayRunning
+
+    fun toggleMobiladorOverlay(enable: Boolean, profile: com.example.model.mobilador.MobiladorProfile) {
+        if (enable) {
+            if (!Settings.canDrawOverlays(context)) {
+                showMessage("Izin 'Tampilkan di atas aplikasi lain' (Overlay) diperlukan!")
+                return
+            }
+            val started = com.example.service.MobiladorOverlayService.start(context, profile)
+            if (started) {
+                showMessage("Overlay Mobilador HUD aktif di atas game.")
+            } else {
+                showMessage("Gagal memulai overlay Mobilador.")
+            }
+        } else {
+            com.example.service.MobiladorOverlayService.stop(context)
+            showMessage("Overlay Mobilador dimatikan.")
+        }
+    }
+
+    fun testTouchInjection(normalizedX: Float, normalizedY: Float) {
+        viewModelScope.launch {
+            val devInfo = _deviceInfo.value
+            val w = devInfo?.screenWidthPx ?: 1080
+            val h = devInfo?.screenHeightPx ?: 2400
+            val res = inputInjectionManager.injectTap(normalizedX, normalizedY, w, h)
+            res.onSuccess {
+                showMessage(it)
+            }.onFailure {
+                showMessage("Gagal injeksi sentuhan: ${it.localizedMessage}")
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         telemetryJob?.cancel()

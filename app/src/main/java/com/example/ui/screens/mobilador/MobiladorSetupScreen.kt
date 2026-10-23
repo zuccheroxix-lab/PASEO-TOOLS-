@@ -38,7 +38,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -48,12 +52,22 @@ import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mouse
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -155,6 +169,23 @@ fun MobiladorSetupScreen(
     var showAddElementDialog by remember { mutableStateOf(false) }
     var selectedElementId by remember { mutableStateOf<String?>(null) }
 
+    val isOverlayRunning by viewModel.isMobiladorOverlayRunning.collectAsStateWithLifecycle()
+    var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var showPermissionDialog by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasOverlayPermission = Settings.canDrawOverlays(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     Surface(
         color = PaseoDarkBackground,
         modifier = Modifier.fillMaxSize().testTag("mobilador_setup_screen")
@@ -170,11 +201,24 @@ fun MobiladorSetupScreen(
                             fontSize = 16.sp,
                             color = Color.White
                         )
-                        Text(
-                            text = "Profil: ${activeProfile.name}",
-                            fontSize = 11.sp,
-                            color = CrimsonGlow
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Profil: ${activeProfile.name}",
+                                fontSize = 11.sp,
+                                color = CrimsonGlow
+                            )
+                            if (isOverlayRunning) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(EmeraldAccent.copy(alpha = 0.2f))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text("HUD AKTIF", color = EmeraldAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 },
                 navigationIcon = {
@@ -187,6 +231,23 @@ fun MobiladorSetupScreen(
                     }
                 },
                 actions = {
+                    // Start / Stop Real Floating Overlay Button
+                    IconButton(
+                        onClick = {
+                            if (!hasOverlayPermission) {
+                                showPermissionDialog = true
+                            } else {
+                                viewModel.toggleMobiladorOverlay(!isOverlayRunning, activeProfile)
+                            }
+                        },
+                        modifier = Modifier.testTag("mobilador_overlay_toggle_button")
+                    ) {
+                        Icon(
+                            imageVector = if (isOverlayRunning) Icons.Default.Visibility else Icons.Default.Layers,
+                            contentDescription = "Toggle Floating Overlay",
+                            tint = if (isOverlayRunning) EmeraldAccent else CrimsonGlow
+                        )
+                    }
                     IconButton(
                         onClick = {
                             val undone = mobiladorRepo.undo()
@@ -321,11 +382,30 @@ fun MobiladorSetupScreen(
                         viewModel.showMessage("Layout dikembalikan ke preset awal.")
                     },
                     onOpenAddElement = { showAddElementDialog = true },
+                    isOverlayRunning = isOverlayRunning,
+                    onToggleOverlay = {
+                        if (!hasOverlayPermission) {
+                            showPermissionDialog = true
+                        } else {
+                            viewModel.toggleMobiladorOverlay(!isOverlayRunning, activeProfile)
+                        }
+                    },
                     viewModel = viewModel
                 )
                 2 -> ControlAndIntegrationTab(
                     activeProfile = activeProfile,
                     onUpdateProfile = { mobiladorRepo.updateEditorProfile(it) },
+                    isOverlayRunning = isOverlayRunning,
+                    hasOverlayPermission = hasOverlayPermission,
+                    onRequestPermission = { showPermissionDialog = true },
+                    onToggleOverlay = { enable ->
+                        if (!hasOverlayPermission) {
+                            showPermissionDialog = true
+                        } else {
+                            viewModel.toggleMobiladorOverlay(enable, activeProfile)
+                        }
+                    },
+                    connectedDevices = connectedDevices,
                     viewModel = viewModel
                 )
             }
@@ -543,6 +623,58 @@ fun MobiladorSetupScreen(
                 confirmButton = {},
                 dismissButton = {
                     TextButton(onClick = { showAddElementDialog = false }) {
+                        Text("Batal", color = TextMuted)
+                    }
+                },
+                containerColor = PaseoSurfaceCard
+            )
+        }
+
+        // Overlay Permission Dialog
+        if (showPermissionDialog) {
+            AlertDialog(
+                onDismissRequest = { showPermissionDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Security, contentDescription = null, tint = CrimsonGlow)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Izin Overlay Diperlukan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "Untuk menampilkan floating control hub dan HUD tombol mapping di atas game, Android memerlukan izin 'Tampilkan di atas aplikasi lain' (SYSTEM_ALERT_WINDOW).",
+                            color = Color(0xFFDDDDDD),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Tekan tombol di bawah untuk membuka halaman pengaturan izin aplikasi.",
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showPermissionDialog = false
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
+                    ) {
+                        Text("Buka Pengaturan Android", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPermissionDialog = false }) {
                         Text("Batal", color = TextMuted)
                     }
                 },
@@ -853,6 +985,8 @@ private fun MappingEditorTab(
     onDeleteProfile: () -> Unit,
     onResetLayout: () -> Unit,
     onOpenAddElement: () -> Unit,
+    isOverlayRunning: Boolean,
+    onToggleOverlay: () -> Unit,
     viewModel: MainViewModel
 ) {
     var editKeyBindingDialog by remember { mutableStateOf(false) }
@@ -1093,6 +1227,64 @@ private fun MappingEditorTab(
             }
         }
 
+        // Floating Overlay Launch Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = if (isOverlayRunning) Color(0xFF132B1B) else Color(0xFF221118)),
+                shape = RoundedCornerShape(14.dp),
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(if (isOverlayRunning) EmeraldAccent else CrimsonPrimary, Color(0xFF1B0B14))))
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isOverlayRunning) Icons.Default.CheckCircle else Icons.Default.Layers,
+                                contentDescription = null,
+                                tint = if (isOverlayRunning) EmeraldAccent else CrimsonGlow,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = if (isOverlayRunning) "HUD MAPPING AKTIF DI LAYAR" else "TAMPILKAN DI ATAS GAME",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (isOverlayRunning) EmeraldAccent else Color.White
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = if (isOverlayRunning) "Tombol melayang dan HUD game sedang muncul di atas layar game." else "Munculkan tombol mapping ini melayang di atas layar game Android Anda.",
+                            fontSize = 10.sp,
+                            color = TextMuted,
+                            lineHeight = 14.sp
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Button(
+                        onClick = onToggleOverlay,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isOverlayRunning) Color(0xFF1C6335) else CrimsonPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("btn_toggle_overlay_canvas")
+                    ) {
+                        Icon(
+                            imageVector = if (isOverlayRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (isOverlayRunning) "Stop HUD" else "Start HUD", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // Element Detail Inspector & Adjustment
         val selectedElement = activeProfile.elements.find { it.id == selectedElementId }
         if (selectedElement != null) {
@@ -1252,13 +1444,220 @@ private fun MappingEditorTab(
 private fun ControlAndIntegrationTab(
     activeProfile: MobiladorProfile,
     onUpdateProfile: (MobiladorProfile) -> Unit,
+    isOverlayRunning: Boolean,
+    hasOverlayPermission: Boolean,
+    onRequestPermission: () -> Unit,
+    onToggleOverlay: (Boolean) -> Unit,
+    connectedDevices: List<ConnectedInputDeviceInfo>,
     viewModel: MainViewModel
 ) {
+    val hasHardwareConverter = connectedDevices.any { it.isKeyboard || it.isMouse }
+    val injectionCap = viewModel.inputInjectionManager.getCapability(hasHardwareConverter)
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // In-Game Mouse Settings
+        // 1. MASTER REAL FLOATING OVERLAY HUD CARD
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard),
+                shape = RoundedCornerShape(16.dp),
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(if (isOverlayRunning) EmeraldAccent else CrimsonBorder, Color(0xFF221118))))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "MASTER FLOATING OVERLAY HUD",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (isOverlayRunning) EmeraldAccent else CrimsonGlow,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Layanan Foreground TYPE_APPLICATION_OVERLAY",
+                                fontSize = 10.sp,
+                                color = TextMuted
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isOverlayRunning) Color(0xFF0F2B1A) else Color(0xFF2E1116))
+                                .border(1.dp, if (isOverlayRunning) EmeraldAccent else CrimsonBorder, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = if (isOverlayRunning) "HUD ON (AKTIF)" else "HUD OFF",
+                                color = if (isOverlayRunning) EmeraldAccent else Color(0xFFFF7777),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    if (!hasOverlayPermission) {
+                        // Permission Alert Box
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF331B15)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Security, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(24.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Izin Overlay Diperlukan", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Aktifkan izin 'Tampilkan di atas aplikasi lain' di Pengaturan Android.", color = Color(0xFFDDDDDD), fontSize = 10.sp)
+                                }
+                                Spacer(Modifier.width(6.dp))
+                                Button(
+                                    onClick = onRequestPermission,
+                                    colors = ButtonDefaults.buttonColors(containerColor = AmberWarning),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp).testTag("btn_grant_overlay_permission")
+                                ) {
+                                    Text("Beri Izin", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+
+                    Text(
+                        text = "Ketika overlay dinyalakan, floating hub PASEO dan tombol mapping akan muncul langsung di atas game Android. Tombol floating dapat dipindah, diexpand, diubah opacity, dan dialihkan antara Mode Main Game (touch pass) atau Mode Geser Layout.",
+                        color = Color(0xFFD4CAD0),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { onToggleOverlay(true) },
+                            enabled = !isOverlayRunning,
+                            colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                            modifier = Modifier.weight(1f).height(44.dp).testTag("btn_start_mobilador_overlay"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Mulai Overlay", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = { onToggleOverlay(false) },
+                            enabled = isOverlayRunning,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38151D)),
+                            modifier = Modifier.weight(1f).height(44.dp).testTag("btn_stop_mobilador_overlay"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Stop Overlay", color = Color(0xFFFF6B6B), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. TOUCH INJECTION CAPABILITY & LIVE PRIVILEGED TEST
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard),
+                shape = RoundedCornerShape(16.dp),
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(if (injectionCap.canInjectCrossApp) EmeraldAccent.copy(alpha = 0.5f) else AmberWarning.copy(alpha = 0.5f), Color(0xFF221118))))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.TouchApp,
+                            contentDescription = null,
+                            tint = if (injectionCap.canInjectCrossApp) EmeraldAccent else AmberWarning,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "STATUS INJEKSI SENTUHAN LINTAS GAME",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF130E14))
+                            .padding(10.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = injectionCap.title,
+                                color = if (injectionCap.canInjectCrossApp) EmeraldAccent else AmberWarning,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = injectionCap.description,
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                viewModel.testTouchInjection(0.5f, 0.5f)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26121E)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CrimsonBorder),
+                            modifier = Modifier.weight(1f).testTag("btn_test_touch_injection")
+                        ) {
+                            Text("Uji Injeksi Sentuh (Center)", fontSize = 11.sp, color = Color.White)
+                        }
+
+                        if (!viewModel.shizukuManager.isAuthorized()) {
+                            Button(
+                                onClick = {
+                                    viewModel.navigateToSubScreen(com.example.ui.SubScreen.SHIZUKU_PAGE)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                                modifier = Modifier.weight(1f).testTag("btn_open_shizuku_setup")
+                            ) {
+                                Text("Buka Shizuku", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. IN-GAME MOUSE SETTINGS
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1325,7 +1724,7 @@ private fun ControlAndIntegrationTab(
             }
         }
 
-        // Honest Technical Disclaimer & Architecture Transparency
+        // 4. Honest Technical Disclaimer & Architecture Transparency
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1345,7 +1744,7 @@ private fun ControlAndIntegrationTab(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Android menerapkan isolasi keamanan (App Sandbox). Tanpa converter hardware (seperti Geekgamer, KuGamer, Flydigi) atau Accessibility Service / Shizuku berizin, aplikasi pihak ketiga tidak dapat mengirim simulasi sentuhan ke layar game lain. PASEO SENSI menyediakan editor mapping presisi, generator layout, pengujian input hardware, dan sinkronisasi profil yang aman tanpa merusak integritas sistem atau game.",
+                            text = "Android menerapkan isolasi keamanan (App Sandbox). Tanpa converter hardware (seperti Geekgamer, KuGamer, Flydigi) atau Accessibility Service / Shizuku berizin, aplikasi pihak ketiga tidak dapat mengirim simulasi sentuhan ke layar game lain. PASEO SENSI menyediakan overlay HUD nyata di atas game, editor mapping presisi, generator layout, pengujian input hardware, dan sinkronisasi profil yang aman tanpa merusak integritas sistem atau game.",
                             color = Color(0xFFB5AAB1),
                             fontSize = 11.sp,
                             lineHeight = 15.sp
