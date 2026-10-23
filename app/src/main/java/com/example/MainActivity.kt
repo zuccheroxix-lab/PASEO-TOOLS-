@@ -158,6 +158,12 @@ fun PaseoSensiApp(viewModel: MainViewModel) {
                     onBack = { viewModel.closeSubScreen() }
                 )
             }
+            SubScreen.MOBILADOR_SETUP -> {
+                com.example.ui.screens.mobilador.MobiladorSetupScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.closeSubScreen() }
+                )
+            }
             SubScreen.NONE -> {}
         }
     } else {

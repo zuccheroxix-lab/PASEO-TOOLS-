@@ -46,7 +46,8 @@ enum class SubScreen {
     CROSSHAIR_EDITOR,
     SHIZUKU_PAGE,
     SETTINGS_PAGE,
-    SENSITIVITY_STUDIO
+    SENSITIVITY_STUDIO,
+    MOBILADOR_SETUP
 }
 
 enum class GameLabsCategory {
@@ -63,6 +64,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val preferencesRepository = PreferencesRepository(context)
     val authRepository = com.example.auth.AuthRepository(context)
     val sensitivityRepository = com.example.repository.SensitivityRepository(context)
+    val mobiladorRepository = com.example.repository.MobiladorRepository(context)
     val appLauncherRepository = AppLauncherRepository(context)
     val systemMonitorRepository = SystemMonitorRepository(context)
 
@@ -165,6 +167,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Crosshair State
     val crosshairConfig: StateFlow<CrosshairConfig> = preferencesRepository.crosshairConfig
+    val crosshairPresets: StateFlow<List<com.example.model.CrosshairPreset>> = preferencesRepository.crosshairPresets
+    val isOverlayRunning: StateFlow<Boolean> = CrosshairService.isOverlayRunning.asStateFlow()
 
     // Sensitivity State
     val activeProfile: StateFlow<SensitivityProfile> = sensitivityRepository.activeProfile
@@ -481,6 +485,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun renameCrosshairPreset(id: String, newName: String) {
+        val success = preferencesRepository.renameCrosshairPreset(id, newName)
+        if (success) {
+            showMessage("Preset berhasil diubah namanya.")
+        }
+    }
+
+    fun deleteCrosshairPreset(id: String) {
+        val success = preferencesRepository.deleteCrosshairPreset(id)
+        if (success) {
+            showMessage("Preset kustom berhasil dihapus.")
+        }
+    }
+
     // Sensitivity Settings
     fun selectSensitivityProfile(profile: SensitivityProfile) {
         sensitivityRepository.setActiveProfile(profile)
@@ -493,12 +511,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         preferencesRepository.saveActiveProfile(profile)
     }
 
+    fun updateActiveProfile(profile: SensitivityProfile) {
+        saveActiveProfile(profile)
+    }
+
     fun openSensitivityStudio() {
         navigateToSubScreen(SubScreen.SENSITIVITY_STUDIO)
     }
 
-    fun updateActiveProfile(profile: SensitivityProfile) {
-        saveActiveProfile(profile)
+    val favoritePackages: StateFlow<Set<String>> = preferencesRepository.favoritePackages
+
+    fun toggleFavorite(packageName: String) {
+        val isFav = preferencesRepository.toggleFavoritePackage(packageName)
+        showMessage(if (isFav) "Game ditambahkan ke favorit." else "Game dihapus dari favorit.")
+    }
+
+    fun saveGameProfile(packageName: String, gameName: String, profile: SensitivityProfile) {
+        val saved = sensitivityRepository.saveProfileForGame(packageName, gameName, profile)
+        selectSensitivityProfile(saved)
+        showMessage("Profil sensitivitas '${saved.name}' berhasil disimpan untuk $gameName.")
     }
 
     override fun onCleared() {

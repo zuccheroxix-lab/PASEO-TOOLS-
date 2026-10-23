@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -173,6 +174,17 @@ fun HomeScreen(
                 iconTint = CrimsonPrimary,
                 onClick = { viewModel.navigateToSubScreen(SubScreen.CROSSHAIR_GALLERY) },
                 testTag = "menu_crosshair"
+            )
+        }
+
+        item {
+            MenuActionCard(
+                title = "Mobilador Setup",
+                subtitle = "Keyboard & Mouse Keymapper Canvas",
+                icon = Icons.Default.Keyboard,
+                iconTint = Color(0xFFE040FB),
+                onClick = { viewModel.navigateToSubScreen(SubScreen.MOBILADOR_SETUP) },
+                testTag = "menu_mobilador_setup"
             )
         }
 

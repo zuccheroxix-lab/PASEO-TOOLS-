@@ -88,11 +88,15 @@ fun GameDetailScreen(
     val optFastLaunch by viewModel.optFastLaunch.collectAsStateWithLifecycle()
     val optRog by viewModel.optRogMonitoring.collectAsStateWithLifecycle()
 
-    var generalSensi by remember { mutableFloatStateOf(95f) }
-    var redDotSensi by remember { mutableFloatStateOf(90f) }
-    var scope2xSensi by remember { mutableFloatStateOf(85f) }
-    var scope4xSensi by remember { mutableFloatStateOf(75f) }
-    var sniperSensi by remember { mutableFloatStateOf(60f) }
+    val existingGameProfile = remember(game.packageName) {
+        viewModel.sensitivityRepository.getProfileForGame(game.packageName) ?: viewModel.activeProfile.value
+    }
+
+    var generalSensi by remember(existingGameProfile) { mutableFloatStateOf(existingGameProfile.generalSensi.toFloat()) }
+    var redDotSensi by remember(existingGameProfile) { mutableFloatStateOf(existingGameProfile.redDotSensi.toFloat()) }
+    var scope2xSensi by remember(existingGameProfile) { mutableFloatStateOf(existingGameProfile.scope2xSensi.toFloat()) }
+    var scope4xSensi by remember(existingGameProfile) { mutableFloatStateOf(existingGameProfile.scope4xSensi.toFloat()) }
+    var sniperSensi by remember(existingGameProfile) { mutableFloatStateOf(existingGameProfile.sniperSensi.toFloat()) }
 
     Surface(
         color = PaseoDarkBackground,
@@ -342,12 +346,12 @@ fun GameDetailScreen(
                             ) {
                                 Button(
                                     onClick = {
-                                        generalSensi = 95f
-                                        redDotSensi = 90f
-                                        scope2xSensi = 85f
-                                        scope4xSensi = 75f
-                                        sniperSensi = 60f
-                                        viewModel.showMessage("Pengaturan sensitivitas direset ke default.")
+                                        generalSensi = existingGameProfile.generalSensi.toFloat()
+                                        redDotSensi = existingGameProfile.redDotSensi.toFloat()
+                                        scope2xSensi = existingGameProfile.scope2xSensi.toFloat()
+                                        scope4xSensi = existingGameProfile.scope4xSensi.toFloat()
+                                        sniperSensi = existingGameProfile.sniperSensi.toFloat()
+                                        viewModel.showMessage("Pengaturan sensitivitas direset.")
                                     },
                                     modifier = Modifier.weight(1f),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22222D))
@@ -357,7 +361,14 @@ fun GameDetailScreen(
 
                                 Button(
                                     onClick = {
-                                        viewModel.showMessage("Profil sensitivitas ${game.appName} berhasil disimpan.")
+                                        val updatedProfile = existingGameProfile.copy(
+                                            generalSensi = generalSensi.toInt(),
+                                            redDotSensi = redDotSensi.toInt(),
+                                            scope2xSensi = scope2xSensi.toInt(),
+                                            scope4xSensi = scope4xSensi.toInt(),
+                                            sniperSensi = sniperSensi.toInt()
+                                        )
+                                        viewModel.saveGameProfile(game.packageName, game.appName, updatedProfile)
                                     },
                                     modifier = Modifier.weight(1f),
                                     colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
@@ -382,6 +393,14 @@ fun GameDetailScreen(
                 ) {
                     Button(
                         onClick = {
+                            val profileToApply = existingGameProfile.copy(
+                                generalSensi = generalSensi.toInt(),
+                                redDotSensi = redDotSensi.toInt(),
+                                scope2xSensi = scope2xSensi.toInt(),
+                                scope4xSensi = scope4xSensi.toInt(),
+                                sniperSensi = sniperSensi.toInt()
+                            )
+                            viewModel.saveGameProfile(game.packageName, game.appName, profileToApply)
                             viewModel.showMessage("Optimasi ${game.appName} diterapkan. Membuka game...")
                             viewModel.launchApp(game.packageName)
                         },
@@ -393,7 +412,7 @@ fun GameDetailScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Add,
+                            imageVector = Icons.Default.RocketLaunch,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )

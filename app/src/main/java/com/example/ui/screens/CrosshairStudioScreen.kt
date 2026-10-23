@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
@@ -96,6 +97,8 @@ fun CrosshairStudioScreen(
 ) {
     val context = LocalContext.current
     val currentConfig by viewModel.crosshairConfig.collectAsStateWithLifecycle()
+    val allPresets by viewModel.crosshairPresets.collectAsStateWithLifecycle()
+    val isOverlayRunning by viewModel.isOverlayRunning.collectAsStateWithLifecycle()
 
     var activeTab by remember { mutableIntStateOf(0) } // 0 = Gallery, 1 = Editor
     var selectedFilter by remember { mutableStateOf("All") }
@@ -112,6 +115,13 @@ fun CrosshairStudioScreen(
     var importJsonText by remember { mutableStateOf("") }
     var showSavePresetDialog by remember { mutableStateOf(false) }
     var presetNameInput by remember { mutableStateOf("") }
+
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renamePresetId by remember { mutableStateOf("") }
+    var renamePresetNameInput by remember { mutableStateOf("") }
+
+    val hasOverlayPermission = Settings.canDrawOverlays(context)
+    val isActuallyRunning = isOverlayRunning && hasOverlayPermission && currentConfig.isEnabled
 
     Surface(
         color = PaseoDarkBackground,
@@ -146,11 +156,22 @@ fun CrosshairStudioScreen(
                     )
                 }
 
-                // Overlay Active Indicator
+                // Overlay Active Indicator (Honest Status Reporting)
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val statusText = when {
+                        isActuallyRunning -> "Overlay Aktif"
+                        currentConfig.isEnabled && !hasOverlayPermission -> "Izin Diperlukan"
+                        else -> "Overlay Nonaktif"
+                    }
+                    val statusColor = when {
+                        isActuallyRunning -> Color(0xFF00E676)
+                        currentConfig.isEnabled && !hasOverlayPermission -> Color(0xFFFFAB00)
+                        else -> TextMuted
+                    }
+
                     Text(
-                        text = if (currentConfig.isEnabled) "Overlay On" else "Overlay Off",
-                        color = if (currentConfig.isEnabled) Color(0xFF00E676) else TextMuted,
+                        text = statusText,
+                        color = statusColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -255,53 +276,143 @@ fun CrosshairStudioScreen(
                         }
                     }
 
-                    // Gallery Grid of Reticles
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        contentPadding = PaddingValues(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        val galleryShapes = CrosshairShape.values()
-                        val colorPresets = listOf(
-                            0xFFFF2E44, 0xFF00E676, 0xFF2979FF, 0xFF00E5FF, 0xFFFFD700, 0xFFFFFFFF
-                        )
+                    // Gallery Grid of Real Presets
+                    val filteredPresets = remember(allPresets, selectedFilter) {
+                        when (selectedFilter) {
+                            "Basic" -> allPresets.filter { it.id.contains("dot") || it.id.contains("classic") }
+                            "Pro" -> allPresets.filter { !it.isCustom && !it.id.contains("dot") && !it.id.contains("classic") }
+                            "Custom" -> allPresets.filter { it.isCustom }
+                            else -> allPresets
+                        }
+                    }
 
-                        items(galleryShapes.size * 2) { index ->
-                            val itemShape = galleryShapes[index % galleryShapes.size]
-                            val itemColor = colorPresets[index % colorPresets.size]
-                            val isSelected = shape == itemShape && selectedColor == itemColor
+                    if (filteredPresets.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (selectedFilter == "Custom") "Belum ada preset kustom yang disimpan." else "Tidak ada preset ditemukan.",
+                                color = TextMuted,
+                                fontSize = 13.sp
+                            )
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            contentPadding = PaddingValues(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(filteredPresets, key = { it.id }) { preset ->
+                                val pConfig = preset.config
+                                val isSelected = shape == pConfig.shape && selectedColor == pConfig.colorValue
 
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(96.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .border(
-                                        if (isSelected) 1.5.dp else 1.dp,
-                                        if (isSelected) CrimsonGlow else PaseoBorderDark,
-                                        RoundedCornerShape(14.dp)
-                                    )
-                                    .clickable {
-                                        shape = itemShape
-                                        selectedColor = itemColor
-                                        activeTab = 1 // Switch to Editor
-                                    },
-                                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard)
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Canvas(modifier = Modifier.size(46.dp)) {
-                                        drawCrosshairCanvas(
-                                            shape = itemShape,
-                                            color = Color(itemColor),
-                                            size = size.minDimension,
-                                            thickness = 2.5f.dp.toPx(),
-                                            gap = 5.dp.toPx()
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .border(
+                                            if (isSelected) 1.5.dp else 1.dp,
+                                            if (isSelected) CrimsonGlow else PaseoBorderDark,
+                                            RoundedCornerShape(14.dp)
                                         )
+                                        .clickable {
+                                            shape = pConfig.shape
+                                            sizeDp = pConfig.sizeDp.toFloat()
+                                            offsetX = pConfig.offsetX.toFloat()
+                                            offsetY = pConfig.offsetY.toFloat()
+                                            selectedColor = pConfig.colorValue
+                                            opacity = pConfig.opacity
+                                            thicknessDp = pConfig.thicknessDp
+                                            viewModel.updateCrosshairConfig(pConfig)
+                                            activeTab = 1 // Switch to Editor with this preset loaded
+                                            viewModel.showMessage("Preset '${preset.name}' dimuat.")
+                                        },
+                                    colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFF0F1015)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Canvas(modifier = Modifier.size(36.dp)) {
+                                                drawCrosshairCanvas(
+                                                    shape = pConfig.shape,
+                                                    color = Color(pConfig.colorValue).copy(alpha = pConfig.opacity),
+                                                    size = 32.dp.toPx(),
+                                                    thickness = (pConfig.thicknessDp * 0.8f).dp.toPx(),
+                                                    gap = (pConfig.gapDp * 0.8f).dp.toPx()
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(6.dp))
+
+                                        Text(
+                                            text = preset.name,
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (preset.isCustom) "Kustom" else "Preset Bawaan",
+                                                color = if (preset.isCustom) CrimsonGlow else TextMuted,
+                                                fontSize = 10.sp
+                                            )
+
+                                            if (preset.isCustom) {
+                                                Row {
+                                                    IconButton(
+                                                        onClick = {
+                                                            renamePresetId = preset.id
+                                                            renamePresetNameInput = preset.name
+                                                            showRenameDialog = true
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Edit,
+                                                            contentDescription = "Ubah Nama",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                    }
+                                                    IconButton(
+                                                        onClick = {
+                                                            viewModel.deleteCrosshairPreset(preset.id)
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Delete,
+                                                            contentDescription = "Hapus",
+                                                            tint = Color(0xFFFF5555),
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -704,6 +815,47 @@ fun CrosshairStudioScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showSavePresetDialog = false }) {
+                        Text("Batal", color = TextMuted)
+                    }
+                },
+                containerColor = PaseoSurfaceCard
+            )
+        }
+
+        // Rename Custom Preset Dialog
+        if (showRenameDialog) {
+            AlertDialog(
+                onDismissRequest = { showRenameDialog = false },
+                title = { Text("Ubah Nama Preset", color = Color.White) },
+                text = {
+                    OutlinedTextField(
+                        value = renamePresetNameInput,
+                        onValueChange = { renamePresetNameInput = it },
+                        label = { Text("Nama Baru") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CrimsonPrimary,
+                            unfocusedBorderColor = PaseoBorderDark,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (renamePresetNameInput.isNotBlank()) {
+                                viewModel.renameCrosshairPreset(renamePresetId, renamePresetNameInput.trim())
+                                showRenameDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
+                    ) {
+                        Text("Simpan")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRenameDialog = false }) {
                         Text("Batal", color = TextMuted)
                     }
                 },

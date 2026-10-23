@@ -119,6 +119,21 @@ class SensitivityRepository(context: Context) {
         return true
     }
 
+    fun getProfileForGame(packageName: String): SensitivityProfile? {
+        return _allProfiles.value.find { it.gamePackage == packageName }
+    }
+
+    fun saveProfileForGame(packageName: String, gameName: String, profile: SensitivityProfile): SensitivityProfile {
+        val existing = getProfileForGame(packageName)
+        val profileToSave = profile.copy(
+            id = existing?.id ?: ("game_" + UUID.randomUUID().toString().take(8)),
+            name = if (profile.name.isBlank()) "$gameName Spec" else profile.name,
+            gamePackage = packageName,
+            isCustom = true
+        )
+        return saveCustomProfile(profileToSave)
+    }
+
     fun resetToDefaults() {
         prefs.edit().remove("custom_profiles_json").remove("active_profile_id").apply()
         _allProfiles.value = SensitivityProfile.PRESETS

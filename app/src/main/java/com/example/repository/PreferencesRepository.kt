@@ -46,6 +46,27 @@ class PreferencesRepository(context: Context) {
             prefs.edit().putString(KEY_BUG_REPORT_LINK, value).apply()
         }
 
+    private val _favoritePackages = MutableStateFlow(getFavoritePackages())
+    val favoritePackages: StateFlow<Set<String>> = _favoritePackages.asStateFlow()
+
+    fun getFavoritePackages(): Set<String> {
+        return prefs.getStringSet("favorite_game_packages", emptySet()) ?: emptySet()
+    }
+
+    fun toggleFavoritePackage(packageName: String): Boolean {
+        val current = getFavoritePackages().toMutableSet()
+        val isNowFavorite = if (current.contains(packageName)) {
+            current.remove(packageName)
+            false
+        } else {
+            current.add(packageName)
+            true
+        }
+        prefs.edit().putStringSet("favorite_game_packages", current).apply()
+        _favoritePackages.value = current
+        return isNowFavorite
+    }
+
     private fun loadCrosshairConfig(): CrosshairConfig {
         return try {
             val isEnabled = prefs.getBoolean(KEY_CH_ENABLED, false)
@@ -98,6 +119,9 @@ class PreferencesRepository(context: Context) {
         _crosshairConfig.value = config
     }
 
+    private val _crosshairPresets = MutableStateFlow(getAllCrosshairPresets())
+    val crosshairPresets: StateFlow<List<com.example.model.CrosshairPreset>> = _crosshairPresets.asStateFlow()
+
     fun getAllCrosshairPresets(): List<com.example.model.CrosshairPreset> {
         val customs = loadCustomCrosshairPresets()
         return com.example.model.CrosshairPreset.DEFAULT_PRESETS + customs
@@ -147,6 +171,29 @@ class PreferencesRepository(context: Context) {
             array.put(obj)
         }
         prefs.edit().putString("custom_crosshair_presets_json", array.toString()).apply()
+        _crosshairPresets.value = getAllCrosshairPresets()
+    }
+
+    fun renameCrosshairPreset(id: String, newName: String): Boolean {
+        if (com.example.model.CrosshairPreset.DEFAULT_PRESETS.any { it.id == id }) return false
+        val customs = loadCustomCrosshairPresets().toMutableList()
+        val index = customs.indexOfFirst { it.id == id }
+        if (index < 0) return false
+        val target = customs[index]
+        customs[index] = target.copy(name = newName.trim())
+        val array = org.json.JSONArray()
+        for (p in customs) {
+            val obj = org.json.JSONObject().apply {
+                put("id", p.id)
+                put("name", p.name)
+                put("config", org.json.JSONObject(p.config.toJson()))
+                put("isCustom", true)
+            }
+            array.put(obj)
+        }
+        prefs.edit().putString("custom_crosshair_presets_json", array.toString()).apply()
+        _crosshairPresets.value = getAllCrosshairPresets()
+        return true
     }
 
     fun deleteCrosshairPreset(id: String): Boolean {
@@ -165,6 +212,7 @@ class PreferencesRepository(context: Context) {
                 array.put(obj)
             }
             prefs.edit().putString("custom_crosshair_presets_json", array.toString()).apply()
+            _crosshairPresets.value = getAllCrosshairPresets()
         }
         return removed
     }

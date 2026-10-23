@@ -90,8 +90,9 @@ class CrosshairService : Service() {
         try {
             windowManager?.addView(overlayView, params)
             overlayView?.setConfig(config)
+            isOverlayRunning.value = true
         } catch (e: Exception) {
-            // Error handling
+            isOverlayRunning.value = false
         }
     }
 
@@ -132,7 +133,7 @@ class CrosshairService : Service() {
                 // Safe ignore
             }
         }
-        overlayView = null
+        isOverlayRunning.value = false
         super.onDestroy()
     }
 
@@ -187,6 +188,7 @@ class CrosshairService : Service() {
         const val ACTION_STOP = "com.zuccheroxann.paseosensi.ACTION_STOP_CROSSHAIR"
 
         val liveConfig = MutableStateFlow(CrosshairConfig(isEnabled = false))
+        val isOverlayRunning = MutableStateFlow(false)
 
         fun start(context: Context, config: CrosshairConfig) {
             liveConfig.value = config.copy(isEnabled = true)
@@ -199,6 +201,7 @@ class CrosshairService : Service() {
         }
 
         fun stop(context: Context) {
+            isOverlayRunning.value = false
             liveConfig.value = liveConfig.value.copy(isEnabled = false)
             val intent = Intent(context, CrosshairService::class.java).apply {
                 action = ACTION_STOP
