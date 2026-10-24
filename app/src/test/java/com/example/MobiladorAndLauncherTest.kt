@@ -207,4 +207,32 @@ class MobiladorAndLauncherTest {
         assertEquals(original.normalizedY, parsed.normalizedY, 0.001f)
         assertEquals(original.sizeDp, parsed.sizeDp, 0.001f)
     }
+
+    @Test
+    fun testMobiladorProfileExtendedFieldsIntegrity() {
+        val base = mobiladorRepository.activeProfile.value
+        val extendedProfile = base.copy(
+            aspectRatio = "16:9",
+            resolutionScale = 1.15f,
+            cursorSpeed = 1.8f,
+            cursorSizeDp = 48f,
+            isLocked = true
+        )
+
+        val json = extendedProfile.toJson()
+        val parsed = MobiladorProfile.fromJson(json)
+
+        assertNotNull(parsed)
+        assertEquals("16:9", parsed?.aspectRatio)
+        assertEquals(1.15f, parsed?.resolutionScale ?: 0f, 0.01f)
+        assertEquals(1.8f, parsed?.cursorSpeed ?: 0f, 0.01f)
+        assertEquals(48f, parsed?.cursorSizeDp ?: 0f, 0.01f)
+        assertTrue(parsed?.isLocked == true)
+
+        // Test Edit Mode in Overlay Service
+        com.example.service.MobiladorOverlayService.isEditModeActive.value = true
+        assertTrue(com.example.service.MobiladorOverlayService.isEditModeActive.value)
+        com.example.service.MobiladorOverlayService.isEditModeActive.value = false
+        assertFalse(com.example.service.MobiladorOverlayService.isEditModeActive.value)
+    }
 }

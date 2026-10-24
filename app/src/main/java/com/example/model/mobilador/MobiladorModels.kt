@@ -73,10 +73,14 @@ data class MobiladorProfile(
     val id: String,
     val name: String,
     val gamePackage: String? = null,
-    val aspectRatio: String = "20:9", // "16:9", "20:9", "4:3"
+    val aspectRatio: String = "20:9", // "16:9", "20:9", "19.5:9", "4:3"
     val mouseSensitivityX: Float = 1.0f,
     val mouseSensitivityY: Float = 1.0f,
     val isCursorHiddenInGame: Boolean = true,
+    val cursorSpeed: Float = 1.0f,
+    val cursorSizeDp: Float = 32f,
+    val resolutionScale: Float = 1.0f,
+    val isLocked: Boolean = false,
     val elements: List<MappingElement>,
     val isCustom: Boolean = false
 ) {
@@ -89,6 +93,10 @@ data class MobiladorProfile(
             put("mouseSensitivityX", mouseSensitivityX.toDouble())
             put("mouseSensitivityY", mouseSensitivityY.toDouble())
             put("isCursorHiddenInGame", isCursorHiddenInGame)
+            put("cursorSpeed", cursorSpeed.toDouble())
+            put("cursorSizeDp", cursorSizeDp.toDouble())
+            put("resolutionScale", resolutionScale.toDouble())
+            put("isLocked", isLocked)
             put("isCustom", isCustom)
             val elemArray = JSONArray()
             elements.forEach { elemArray.put(it.toJson()) }
@@ -113,6 +121,10 @@ data class MobiladorProfile(
                     mouseSensitivityX = obj.optDouble("mouseSensitivityX", 1.0).toFloat(),
                     mouseSensitivityY = obj.optDouble("mouseSensitivityY", 1.0).toFloat(),
                     isCursorHiddenInGame = obj.optBoolean("isCursorHiddenInGame", true),
+                    cursorSpeed = obj.optDouble("cursorSpeed", 1.0).toFloat(),
+                    cursorSizeDp = obj.optDouble("cursorSizeDp", 32.0).toFloat(),
+                    resolutionScale = obj.optDouble("resolutionScale", 1.0).toFloat(),
+                    isLocked = obj.optBoolean("isLocked", false),
                     elements = elemList,
                     isCustom = obj.optBoolean("isCustom", true)
                 )

@@ -1189,19 +1189,21 @@ private fun MappingEditorTab(
                                         },
                                         shape = if (elem.type == MappingElementType.MOVEMENT_WASD || elem.type == MappingElementType.MOUSE_LOOK) CircleShape else RoundedCornerShape(10.dp)
                                     )
-                                    .pointerInput(elem.id) {
-                                        detectDragGestures(
-                                            onDragStart = { onSelectElement(elem.id) },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                val newNormX = (elem.normalizedX + (dragAmount.x / canvasWidth.toPx())).coerceIn(0.05f, 0.95f)
-                                                val newNormY = (elem.normalizedY + (dragAmount.y / canvasHeight.toPx())).coerceIn(0.05f, 0.95f)
-                                                val updatedList = activeProfile.elements.map {
-                                                    if (it.id == elem.id) it.copy(normalizedX = newNormX, normalizedY = newNormY) else it
+                                    .pointerInput(elem.id, activeProfile.isLocked) {
+                                        if (!activeProfile.isLocked) {
+                                            detectDragGestures(
+                                                onDragStart = { onSelectElement(elem.id) },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    val newNormX = (elem.normalizedX + (dragAmount.x / canvasWidth.toPx())).coerceIn(0.05f, 0.95f)
+                                                    val newNormY = (elem.normalizedY + (dragAmount.y / canvasHeight.toPx())).coerceIn(0.05f, 0.95f)
+                                                    val updatedList = activeProfile.elements.map {
+                                                        if (it.id == elem.id) it.copy(normalizedX = newNormX, normalizedY = newNormY) else it
+                                                    }
+                                                    onUpdateProfile(activeProfile.copy(elements = updatedList))
                                                 }
-                                                onUpdateProfile(activeProfile.copy(elements = updatedList))
-                                            }
-                                        )
+                                            )
+                                        }
                                     }
                                     .clickable { onSelectElement(elem.id) },
                                 contentAlignment = Alignment.Center
@@ -1223,6 +1225,77 @@ private fun MappingEditorTab(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Resolution Scale, Aspect Ratio & Layout Lock Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = PaseoSurfaceCard),
+                shape = RoundedCornerShape(14.dp),
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(Color(0xFF00E5FF).copy(alpha = 0.5f), Color(0xFF221520))))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("RESOLUTION SCALE & KUNCI LAYOUT", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF00E5FF))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (activeProfile.isLocked) "LAYOUT TERKUNCI" else "LAYOUT BEBAS GESER",
+                                color = if (activeProfile.isLocked) EmeraldAccent else AmberWarning,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Switch(
+                                checked = activeProfile.isLocked,
+                                onCheckedChange = { onUpdateProfile(activeProfile.copy(isLocked = it)) },
+                                colors = switchColors()
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Aspect Ratio Presets
+                    Text("Rasio Aspek Layar Game:", fontSize = 11.sp, color = TextMuted)
+                    Spacer(Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("16:9", "20:9", "19.5:9", "4:3").forEach { r ->
+                            val isSel = activeProfile.aspectRatio == r
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSel) CrimsonPrimary else Color(0xFF26121C))
+                                    .border(1.dp, if (isSel) CrimsonGlow else PaseoBorderDark, RoundedCornerShape(8.dp))
+                                    .clickable { onUpdateProfile(activeProfile.copy(aspectRatio = r)) }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(r, color = if (isSel) Color.White else Color(0xFFCCCCCC), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Coordinate Scale Multiplier Slider
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Skala Koordinat Layar", fontSize = 11.sp, color = Color.White)
+                        Text("${String.format(java.util.Locale.US, "%.2fx", activeProfile.resolutionScale)} (${(activeProfile.resolutionScale * 100).toInt()}%)", fontSize = 11.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = activeProfile.resolutionScale,
+                        onValueChange = { onUpdateProfile(activeProfile.copy(resolutionScale = it)) },
+                        valueRange = 0.80f..1.20f,
+                        colors = sliderColors()
+                    )
                 }
             }
         }
@@ -1691,6 +1764,66 @@ private fun ControlAndIntegrationTab(
                             },
                             colors = switchColors()
                         )
+                    }
+
+                    // Cursor Speed Multiplier
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Kecepatan Kursor (Speed Multiplier)", fontSize = 11.sp, color = Color.White)
+                        Text(String.format(java.util.Locale.US, "%.1fx", activeProfile.cursorSpeed), fontSize = 11.sp, color = CrimsonGlow, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = activeProfile.cursorSpeed,
+                        onValueChange = { onUpdateProfile(activeProfile.copy(cursorSpeed = it)) },
+                        valueRange = 0.5f..3.0f,
+                        colors = sliderColors()
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Cursor Size Selector (24dp, 32dp, 48dp)
+                    Text("Ukuran Kursor / Reticle In-Game", fontSize = 11.sp, color = Color.White)
+                    Spacer(Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(24f to "Kecil (24dp)", 32f to "Sedang (32dp)", 48f to "Besar (48dp)").forEach { (sz, lbl) ->
+                            val isSel = (activeProfile.cursorSizeDp - sz) in -2f..2f
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSel) CrimsonPrimary else Color(0xFF26121C))
+                                    .border(1.dp, if (isSel) CrimsonGlow else PaseoBorderDark, RoundedCornerShape(8.dp))
+                                    .clickable { onUpdateProfile(activeProfile.copy(cursorSizeDp = sz)) }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(lbl, color = if (isSel) Color.White else Color(0xFFCCCCCC), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Polling Rate Info Card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1B0F15)),
+                        shape = RoundedCornerShape(10.dp),
+                        border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(Color(0xFF3B1822), Color(0xFF221118))))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Info, contentDescription = null, tint = EmeraldAccent, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("INFO POLLING RATE HARDWARE", color = EmeraldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "Layar Android: Refresh rate layar display aktif (60Hz / 90Hz / 120Hz).\nMouse USB HID: 125Hz standar Android OS, atau hingga 500Hz/1000Hz via converter gaming OTG (Geekgamer/KuGamer/Flydigi).",
+                                color = TextMuted,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(12.dp))
